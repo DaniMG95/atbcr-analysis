@@ -5,7 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from atbcr_analysis.plots import plot_final_distribution, plot_metric_trajectories
+from atbcr_analysis.plots import (
+    plot_final_distribution,
+    plot_metric_trajectories,
+    plot_opinion_trajectories,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,11 +29,32 @@ def main(argv: list[str] | None = None) -> int:
     distribution.add_argument("--bins", type=int, default=50)
     distribution.add_argument("--output", type=Path, required=True)
 
+    opinions = subparsers.add_parser("opinions")
+    opinions.add_argument("snapshots_csv", type=Path)
+    opinions.add_argument("--scenario")
+    opinions.add_argument("--variant")
+    opinions.add_argument("--normalizer")
+    opinions.add_argument("--normalization-every")
+    opinions.add_argument("--run-seed")
+    opinions.add_argument("--max-agents", type=int)
+    opinions.add_argument("--output", type=Path, required=True)
+
     args = parser.parse_args(argv)
     if args.command == "metric":
         plot_metric_trajectories(args.trajectories_csv, args.output, metric=args.metric)
     elif args.command == "distribution":
         plot_final_distribution(args.snapshots_csv, args.output, bins=args.bins)
+    elif args.command == "opinions":
+        plot_opinion_trajectories(
+            args.snapshots_csv,
+            args.output,
+            scenario=args.scenario,
+            variant=args.variant,
+            normalizer=args.normalizer,
+            normalization_every=args.normalization_every,
+            run_seed=args.run_seed,
+            max_agents=args.max_agents,
+        )
     return 0
 
 

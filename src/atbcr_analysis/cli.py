@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from atbcr_analysis.config import (
     ATBCRModelConfig,
@@ -29,8 +34,24 @@ from atbcr_analysis.persistence import write_experiment_outputs
 
 
 def main(argv: list[str] | None = None) -> int:
+    config_path = _parse_config_path(argv)
+    if config_path is not None:
+        parser = _build_parser()
+        overrides = _parse_cli_overrides(argv)
+        overrides.pop("config", None)
+        config = _read_yaml_config(config_path)
+        for experiment in _iter_yaml_experiments(config):
+            args = _args_from_mapping(parser, experiment, overrides)
+            _run_experiment(args)
+        return 0
+
     parser = _build_parser()
     args = parser.parse_args(argv)
+    _run_experiment(args)
+    return 0
+
+
+def _run_experiment(args: argparse.Namespace) -> None:
     scenarios = _select_scenarios(args)
     variants = _select_variants(args)
     normalizations = _select_normalizations(args)
@@ -63,7 +84,20 @@ def main(argv: list[str] | None = None) -> int:
             variant_base = base_simulation.with_variant(variant, scenario)
             for normalization in normalizations:
                 simulation = _apply_normalization(variant_base, normalization)
-                results.append(run_monte_carlo(simulation, monte_carlo))
+                progress = None
+                if not args.no_progress:
+                    progress = _ProgressBar(_progress_label(simulation))
+                try:
+                    results.append(
+                        run_monte_carlo(
+                            simulation,
+                            monte_carlo,
+                            progress_callback=progress,
+                        ),
+                    )
+                finally:
+                    if progress is not None:
+                        progress.finish()
 
     write_experiment_outputs(
         output_dir,
@@ -76,7 +110,6 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     _print_summary(results)
-    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -84,6 +117,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="atbcr",
         description="Run Monte Carlo experiments for the ATBCR opinion dynamics model.",
     )
+    parser.add_argument("--config", type=Path, help="YAML file with one or more experiment runs.")
     parser.add_argument(
         "--scenarios",
         default="custom:0.3:0.8:0.1",
@@ -102,7 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--watts-rewire-probability", type=float, default=0.1)
     parser.add_argument("--steps", type=int, default=13_500)
     parser.add_argument("--runs", type=int, default=20)
-    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--workers", type=_parse_workers, default=1)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--extremized-threshold", type=float, default=0.9)
     parser.add_argument("--cluster-tolerance", type=float, default=0.001)
@@ -114,12 +148,163 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--concern-high", type=float, default=1.0)
     parser.add_argument("--non-concern-low", type=float, default=0.0)
     parser.add_argument("--non-concern-high", type=float, default=0.75)
-    parser.add_argument("--normalizer", choices=["none", "max_abs", "signed_log_max_abs"], default="none")
+    parser.add_argument(
+        "--normalizer",
+        choices=["none", "max_abs", "signed_log_max_abs"],
+        default="none",
+    )
     parser.add_argument("--normalization-every", default="")
     parser.add_argument("--record-every", type=int, default=500)
     parser.add_argument("--no-snapshots", action="store_true")
+    parser.add_argument("--no-progress", action="store_true")
     parser.add_argument("--output-dir", default="runs/experiment")
     return parser
+
+
+class _ProgressBar:
+    def __init__(self, label: str, *, width: int = 28) -> None:
+        self.label = label
+        self.width = width
+        self.completed = 0
+        self.total = 0
+
+    def __call__(self, completed: int, total: int) -> None:
+        self.completed = completed
+        self.total = total
+        ratio = completed / total if total else 1.0
+        filled = min(self.width, int(self.width * ratio))
+        bar = "#" * filled + "-" * (self.width - filled)
+        remaining = max(total - completed, 0)
+        percent = int(ratio * 100)
+        sys.stderr.write(
+            f"\r{self.label} [{bar}] {completed}/{total} "
+            f"({percent:3d}%) quedan {remaining}",
+        )
+        sys.stderr.flush()
+
+    def finish(self) -> None:
+        if self.total == 0:
+            return
+        sys.stderr.write("\n")
+        sys.stderr.flush()
+
+
+def _progress_label(simulation: SimulationConfig) -> str:
+    normalizer = simulation.normalization.kind
+    if simulation.normalization.every is not None:
+        normalizer = f"{normalizer}/{simulation.normalization.every}"
+    return f"{simulation.name}/{simulation.variant}/{normalizer}"
+
+
+def _parse_workers(value: Any) -> int:
+    if isinstance(value, str) and value.lower() in {"auto", "max"}:
+        return os.cpu_count() or 1
+    try:
+        workers = int(value)
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError(
+            "workers must be a positive integer, 'auto', or 'max'",
+        ) from error
+    if workers < 1:
+        raise argparse.ArgumentTypeError("workers must be at least 1")
+    return workers
+
+
+def _parse_config_path(argv: list[str] | None) -> Path | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--config", type=Path)
+    args, _ = parser.parse_known_args(argv)
+    return args.config
+
+
+def _parse_cli_overrides(argv: list[str] | None) -> dict[str, Any]:
+    parser = _build_parser()
+    for action in parser._actions:
+        if action.option_strings:
+            action.default = argparse.SUPPRESS
+    return vars(parser.parse_args(argv))
+
+
+def _read_yaml_config(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+    if payload is None:
+        raise ValueError(f"YAML config is empty: {path}")
+    if not isinstance(payload, dict):
+        raise ValueError("YAML config must be a mapping")
+    return payload
+
+
+def _iter_yaml_experiments(config: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    explicit_defaults = config.get("defaults", {})
+    if not isinstance(explicit_defaults, dict):
+        raise ValueError("YAML 'defaults' must be a mapping")
+
+    experiments = config.get("experiments")
+    if experiments is None:
+        return (_normalize_config_mapping(config, reserved_keys={"defaults"}),)
+    if not isinstance(experiments, list) or not experiments:
+        raise ValueError("YAML 'experiments' must be a non-empty list")
+
+    normalized: list[dict[str, Any]] = []
+    inline_defaults = {
+        key: value
+        for key, value in config.items()
+        if key not in {"defaults", "experiments"}
+    }
+    defaults = {**inline_defaults, **explicit_defaults}
+    for experiment in experiments:
+        if not isinstance(experiment, dict):
+            raise ValueError("Each YAML experiment must be a mapping")
+        merged = {**defaults, **experiment}
+        normalized.append(_normalize_config_mapping(merged))
+    return tuple(normalized)
+
+
+def _normalize_config_mapping(
+    config: dict[str, Any],
+    *,
+    reserved_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    reserved = {"config", "experiments", *(reserved_keys or set())}
+    normalized = {key.replace("-", "_"): value for key, value in config.items()}
+    parser = _build_parser()
+    allowed = {
+        action.dest
+        for action in parser._actions
+        if action.dest != argparse.SUPPRESS and action.dest not in reserved
+    }
+    unknown = set(normalized) - allowed - reserved
+    if unknown:
+        raise ValueError(f"Unsupported YAML config keys: {sorted(unknown)}")
+    return {
+        key: _normalize_config_value(key, value)
+        for key, value in normalized.items()
+        if key not in reserved
+    }
+
+
+def _normalize_config_value(key: str, value: Any) -> Any:
+    if key in {"scenarios", "variants", "normalization_every"} and isinstance(value, list):
+        return ",".join(str(item) for item in value)
+    if key == "workers":
+        return _parse_workers(value)
+    return value
+
+
+def _args_from_mapping(
+    parser: argparse.ArgumentParser,
+    config: dict[str, Any],
+    overrides: dict[str, Any],
+) -> argparse.Namespace:
+    values = {
+        action.dest: action.default
+        for action in parser._actions
+        if action.dest != argparse.SUPPRESS
+    }
+    values.update(config)
+    values.update(overrides)
+    return argparse.Namespace(**values)
 
 
 def _build_graph_config(args: argparse.Namespace) -> GraphConfig:
@@ -143,7 +328,11 @@ def _build_graph_config(args: argparse.Namespace) -> GraphConfig:
 
 def _select_scenarios(args: argparse.Namespace) -> tuple[ScenarioConfig, ...]:
     if args.scenarios:
-        return tuple(_parse_scenario(raw, args.model) for raw in args.scenarios.split(",") if raw.strip())
+        return tuple(
+            _parse_scenario(raw, args.model)
+            for raw in args.scenarios.split(",")
+            if raw.strip()
+        )
     return (
         ScenarioConfig(
             name="custom",
@@ -233,7 +422,10 @@ def _select_normalizations(args: argparse.Namespace) -> tuple[NormalizationConfi
     ]
     if not frequencies:
         raise ValueError("--normalization-every is required when --normalizer is not none")
-    return tuple(NormalizationConfig(kind=args.normalizer, every=frequency) for frequency in frequencies)
+    return tuple(
+        NormalizationConfig(kind=args.normalizer, every=frequency)
+        for frequency in frequencies
+    )
 
 
 def _apply_normalization(

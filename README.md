@@ -118,6 +118,68 @@ py -m pip install -e .
 py -m atbcr_analysis.cli --scenarios repulsivo:0.2:0.7:0.1,intermedio:0.3:0.8:0.1,confianza:0.4:0.9:0.1 --output-dir runs/article-scenarios
 ```
 
+Tambien se puede lanzar la misma configuracion desde YAML. Los nombres de las
+claves coinciden con los flags del CLI, pero usando guion bajo en vez de guion:
+
+```yaml
+scenarios:
+  - repulsivo:0.2:0.7:0.1
+  - intermedio:0.3:0.8:0.1
+  - confianza:0.4:0.9:0.1
+variants:
+  - baseline_01
+  - bounded_m11
+  - unbounded
+steps: 13500
+runs: 20
+workers: max
+seed: 7
+record_every: 500
+output_dir: runs/article-scenarios
+```
+
+```powershell
+atbcr --config experiments.yaml
+```
+
+Para lanzar varias pruebas seguidas, usa `defaults` y `experiments`:
+
+```yaml
+defaults:
+  variants: [unbounded]
+  steps: 13500
+  runs: 20
+  record_every: 500
+
+experiments:
+  - scenarios: [repulsivo:0.2:0.7:0.1]
+    normalizer: max_abs
+    normalization_every: [100, 500, 1000]
+    output_dir: runs/max-abs-repulsivo
+  - scenarios: [repulsivo:0.2:0.7:0.1]
+    normalizer: signed_log_max_abs
+    normalization_every: [100, 500, 1000]
+    output_dir: runs/signed-log-repulsivo
+```
+
+Los flags del CLI sobrescriben el YAML, por ejemplo `atbcr --config
+experiments.yaml --seed 99`.
+
+`workers` acepta un numero concreto o `max`/`auto` para usar todos los nucleos
+disponibles:
+
+```yaml
+workers: max
+```
+
+Durante la ejecucion, `atbcr` muestra una barra por cada combinacion
+`scenario/variant/normalizer`, con las replicas completadas y cuantas quedan.
+Se puede desactivar con `--no-progress`:
+
+```powershell
+atbcr --config experiments.yaml --no-progress
+```
+
 ## Barrido de normalizacion
 
 Normalizacion por `max(abs(x))` cada `k` iteraciones:
@@ -168,7 +230,7 @@ atbcr-compare runs/reference/snapshots.csv --output runs/reference/wasserstein.c
 ## Plots
 
 El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
-`atbcr`. Tiene dos subcomandos:
+`atbcr`. Tiene tres subcomandos:
 
 - `metric`: lee `trajectories.csv` y dibuja una metrica temporal por serie
   `scenario/variant/normalizer/normalization_every`. Por defecto usa
@@ -176,6 +238,10 @@ El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
 - `distribution`: lee `snapshots.csv`, selecciona el ultimo `step` de cada
   replica y dibuja histogramas de opiniones finales. Por defecto usa 50 bins,
   configurable con `--bins`.
+- `opinions`: lee `snapshots.csv` y dibuja como cambian las opiniones de los
+  agentes a lo largo del tiempo para una replica concreta. Se puede filtrar por
+  `--scenario`, `--variant`, `--normalizer`, `--normalization-every` y
+  `--run-seed`.
 
 Ambos subcomandos requieren `--output` con la ruta del archivo de imagen. La
 extension elegida determina el formato que escribira Matplotlib, por ejemplo
@@ -184,4 +250,5 @@ extension elegida determina el formato que escribira Matplotlib, por ejemplo
 ```powershell
 atbcr-plot metric runs/reference/trajectories.csv --metric max_abs_opinion --output runs/reference/max_abs.png
 atbcr-plot distribution runs/reference/snapshots.csv --bins 50 --output runs/reference/final_distribution.png
+atbcr-plot opinions runs/reference/snapshots.csv --scenario repulsivo --variant unbounded --normalizer max_abs --normalization-every 100 --run-seed 7 --output runs/reference/opinions.png
 ```

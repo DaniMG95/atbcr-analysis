@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from typing import Callable
 
 from atbcr_analysis.config import MonteCarloConfig, SimulationConfig
 from atbcr_analysis.metrics import mean
@@ -33,6 +34,8 @@ class ExperimentResult:
 def run_monte_carlo(
     simulation_config: SimulationConfig,
     monte_carlo_config: MonteCarloConfig,
+    *,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> ExperimentResult:
     """Run independent stochastic simulations and aggregate their outputs."""
 
@@ -42,15 +45,23 @@ def run_monte_carlo(
 
     if monte_carlo_config.workers <= 1:
         runner = SimulationRunner.from_config(simulation_config)
-        simulations = tuple(runner.run(seed) for seed in seeds)
+        completed_simulations: list[SimulationResult] = []
+        for seed in seeds:
+            completed_simulations.append(runner.run(seed))
+            if progress_callback is not None:
+                progress_callback(len(completed_simulations), len(seeds))
+        simulations = tuple(completed_simulations)
     else:
+        completed_simulations = []
         with ProcessPoolExecutor(max_workers=monte_carlo_config.workers) as executor:
-            simulations = tuple(
-                executor.map(
-                    _simulate_worker,
-                    [(simulation_config, seed) for seed in seeds],
-                ),
-            )
+            for simulation in executor.map(
+                _simulate_worker,
+                [(simulation_config, seed) for seed in seeds],
+            ):
+                completed_simulations.append(simulation)
+                if progress_callback is not None:
+                    progress_callback(len(completed_simulations), len(seeds))
+        simulations = tuple(completed_simulations)
 
     final_metrics = [run.final_metrics for run in simulations]
     return ExperimentResult(
