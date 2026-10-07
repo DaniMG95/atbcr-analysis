@@ -1,0 +1,20 @@
+"""Base contracts for graph generators."""
+
+from __future__ import annotations
+
+import random
+from collections.abc import Callable
+from typing import Protocol
+
+Adjacency = list[tuple[int, ...]]
+Edge = tuple[int, int]
+
+
+class GraphGeneratorConfig(Protocol):
+    """Minimum config contract needed by the graph factory."""
+
+    kind: str
+    n_agents: int
+
+
+GraphBuilder = Callable[[GraphGeneratorConfig, random.Random], Adjacency]

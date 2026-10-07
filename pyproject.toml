@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atbcr-analysis"
+version = "0.1.0"
+description = "Monte Carlo experiments for ATBCR dynamic opinion models."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "atbcr-analysis contributors" }
+]
+dependencies = [
+  "matplotlib>=3.8",
+  "pydantic>=2.0",
+]
+
+[project.scripts]
+atbcr = "atbcr_analysis.cli:main"
+atbcr-compare = "atbcr_analysis.analysis_cli:main"
+atbcr-plot = "atbcr_analysis.plot_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["ANN2", "DTZ", "T20", "TRY"]
+ignore = ["TRY003"]
