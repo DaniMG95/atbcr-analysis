@@ -25,6 +25,7 @@ def write_experiment_outputs(
     write_trajectories_csv(output_dir / "trajectories.csv", results)
     write_snapshots_csv(output_dir / "snapshots.csv", results)
     write_normalization_events_csv(output_dir / "normalization_events.csv", results)
+    write_interaction_events_csv(output_dir / "interaction_events.csv", results)
     write_json(output_dir / "config.json", _to_jsonable(config))
 
 
@@ -95,6 +96,7 @@ def write_trajectories_csv(path: Path, results: list[ExperimentResult]) -> None:
             "cluster_count",
             "configured_cluster_tolerance",
             "effective_cluster_tolerance",
+            "unbounded_extreme_cutoff",
         ]
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -193,6 +195,53 @@ def write_normalization_events_csv(path: Path, results: list[ExperimentResult]) 
                             "max_abs_before": event.max_abs_before,
                             "max_abs_after": event.max_abs_after,
                             "scale": event.scale,
+                        },
+                    )
+
+
+def write_interaction_events_csv(path: Path, results: list[ExperimentResult]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        fieldnames = [
+            "scenario",
+            "variant",
+            "normalizer",
+            "normalization_every",
+            "run_seed",
+            "graph_seed",
+            "opinion_seed",
+            "dynamics_seed",
+            "step",
+            "first_agent",
+            "second_agent",
+            "outcome",
+            "first_opinion_before",
+            "second_opinion_before",
+            "first_opinion_after",
+            "second_opinion_after",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            for simulation in result.simulations:
+                for event in simulation.interaction_events:
+                    writer.writerow(
+                        {
+                            "scenario": result.scenario_name,
+                            "variant": result.variant_name,
+                            "normalizer": result.normalizer_name,
+                            "normalization_every": result.normalization_every,
+                            "run_seed": simulation.seed,
+                            "graph_seed": simulation.graph_seed,
+                            "opinion_seed": simulation.opinion_seed,
+                            "dynamics_seed": simulation.dynamics_seed,
+                            "step": event.step,
+                            "first_agent": event.first_agent,
+                            "second_agent": event.second_agent,
+                            "outcome": event.outcome,
+                            "first_opinion_before": event.first_opinion_before,
+                            "second_opinion_before": event.second_opinion_before,
+                            "first_opinion_after": event.first_opinion_after,
+                            "second_opinion_after": event.second_opinion_after,
                         },
                     )
 

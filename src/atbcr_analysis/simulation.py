@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import random
-import math
 from dataclasses import dataclass
 
 from atbcr_analysis.config import SimulationConfig
-from atbcr_analysis.graphs import graph_edges, generate_graph
+from atbcr_analysis.graphs import EdgeSequence, complete_graph_edges, graph_edges, generate_graph
 from atbcr_analysis.metrics import RuleCounts, StepMetrics, max_abs, summarize_step
 from atbcr_analysis.models import build_model
+from atbcr_analysis.models.base import InteractionEvent
+from atbcr_analysis.normalizers import Normalizer
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,7 @@ class SimulationResult:
     trajectory: tuple[OpinionSnapshot, ...]
     final_opinions: tuple[float, ...]
     normalization_events: tuple[NormalizationEvent, ...]
+    interaction_events: tuple[InteractionEvent, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +92,7 @@ class SimulationRunner:
         opinion_rng = random.Random(effective_seeds.opinion_seed)
         dynamics_rng = random.Random(effective_seeds.dynamics_seed)
         adjacency = generate_graph(self.config.graph, graph_rng)
-        edges = graph_edges(adjacency)
+        edges = _simulation_edges(self.config, adjacency)
         if not edges:
             raise ValueError("graph has no edges; choose a denser graph configuration")
 
@@ -99,6 +101,7 @@ class SimulationRunner:
         normalizer = self.config.normalization.build()
         trajectory: list[OpinionSnapshot] = []
         normalization_events: list[NormalizationEvent] = []
+        interaction_events: list[InteractionEvent] = []
         last_snapshot_counts = RuleCounts()
         last_snapshot_step = 0
         _append_snapshot(
@@ -112,9 +115,25 @@ class SimulationRunner:
         )
 
         for step in range(1, self.config.steps + 1):
-            counts.add(model.step(opinions, adjacency, edges, dynamics_rng))
+            if self.config.metrics.store_interaction_events:
+                if not hasattr(model, "step_with_event"):
+                    raise ValueError(
+                        "configured model does not support interaction event recording",
+                    )
+                interaction_event = model.step_with_event(
+                    step,
+                    opinions,
+                    adjacency,
+                    edges,
+                    dynamics_rng,
+                )
+                counts.add(interaction_event.outcome)
+                if interaction_event.outcome != "inaction":
+                    interaction_events.append(interaction_event)
+            else:
+                counts.add(model.step(opinions, adjacency, edges, dynamics_rng))
             if self.config.normalization.should_apply(step):
-                event, opinions = _normalize_with_event(step, normalizer.name, opinions)
+                event, opinions = _normalize_with_event(step, normalizer, opinions)
                 normalization_events.append(event)
             if step % self.config.metrics.record_every == 0 or step == self.config.steps:
                 window_counts = counts.difference(last_snapshot_counts)
@@ -144,6 +163,7 @@ class SimulationRunner:
             trajectory=tuple(trajectory),
             final_opinions=tuple(opinions),
             normalization_events=tuple(normalization_events),
+            interaction_events=tuple(interaction_events),
         )
 
 
@@ -169,12 +189,21 @@ def _append_snapshot(
         counts,
         window_counts,
         window_size=window_size,
-        extremized_threshold=config.metrics.extremized_threshold,
+        unbounded_extreme_cutoff=config.metrics.unbounded_extreme_cutoff,
         cluster_tolerance=config.metrics.cluster_tolerance,
         domain=config.domain,
     )
     snapshot = tuple(opinions) if config.metrics.store_opinion_snapshots else None
     trajectory.append(OpinionSnapshot(metrics=metrics, opinions=snapshot))
+
+
+def _simulation_edges(
+    config: SimulationConfig,
+    adjacency: list[tuple[int, ...]],
+) -> EdgeSequence:
+    if config.graph.kind == "complete":
+        return complete_graph_edges(config.graph.n_agents)
+    return graph_edges(adjacency)
 
 
 def _resolve_seeds(
@@ -194,31 +223,17 @@ def _resolve_seeds(
 
 def _normalize_with_event(
     step: int,
-    normalizer_name: str,
+    normalizer: Normalizer,
     opinions: list[float],
 ) -> tuple[NormalizationEvent, list[float]]:
     before = max_abs(opinions)
-    scale = _normalization_scale(normalizer_name, opinions)
-    if normalizer_name == "max_abs":
-        normalized = [opinion / before for opinion in opinions] if before else opinions
-    elif normalizer_name == "signed_log_max_abs":
-        compressed = [
-            math.copysign(math.log1p(abs(opinion)), opinion)
-            for opinion in opinions
-        ]
-        compressed_scale = max_abs(compressed)
-        normalized = (
-            [opinion / compressed_scale for opinion in compressed]
-            if compressed_scale
-            else compressed
-        )
-    else:
-        normalized = opinions
+    scale = normalizer.scale(opinions)
+    normalized = normalizer.normalize(opinions)
     after = max_abs(normalized)
     return (
         NormalizationEvent(
             step=step,
-            normalizer=normalizer_name,
+            normalizer=normalizer.name,
             max_abs_before=before,
             max_abs_after=after,
             scale=scale,
@@ -227,21 +242,12 @@ def _normalize_with_event(
     )
 
 
-def _normalization_scale(normalizer_name: str, opinions: list[float]) -> float | None:
-    if normalizer_name == "max_abs":
-        return max_abs(opinions)
-    if normalizer_name == "signed_log_max_abs":
-        compressed_abs = [math.log1p(abs(opinion)) for opinion in opinions]
-        return max(compressed_abs) if compressed_abs else None
-    return None
-
-
 def _validate_config(config: SimulationConfig) -> None:
     if config.steps < 1:
         raise ValueError("steps must be positive")
     if config.metrics.record_every < 1:
         raise ValueError("record_every must be positive")
-    if config.metrics.extremized_threshold < 0:
-        raise ValueError("extremized_threshold must be non-negative")
+    if config.metrics.unbounded_extreme_cutoff < 0:
+        raise ValueError("unbounded_extreme_cutoff must be non-negative")
     if config.metrics.cluster_tolerance < 0:
         raise ValueError("cluster_tolerance must be non-negative")

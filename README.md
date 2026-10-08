@@ -47,17 +47,17 @@ Por ejemplo, los primeros escenarios del articulo se pueden lanzar como:
 
 ## Arquitectura
 
-- [models](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/models): reglas de interaccion, contratos y factory de modelos.
-- [graphs](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/graphs): generadores de grafos, contratos y factory de grafos.
-- [simulation.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/simulation.py): motor generico de simulacion.
-- [normalizers.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/normalizers.py): politicas de normalizacion independientes del modelo.
-- [metrics.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/metrics.py): metricas por snapshot.
-- [config.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/config.py): configuracion de escenarios, grafos, modelos, metricas y variantes.
-- [persistence.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/persistence.py): escritura de resultados.
-- [analysis.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/analysis.py): comparacion de distribuciones finales.
-- [plots.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/plots.py): graficos desde CSV persistidos.
+- [models](src/atbcr_analysis/models): reglas de interaccion, contratos y factory de modelos.
+- [graphs](src/atbcr_analysis/graphs): generadores de grafos, contratos y factory de grafos.
+- [simulation.py](src/atbcr_analysis/simulation.py): motor generico de simulacion.
+- [normalizers.py](src/atbcr_analysis/normalizers.py): politicas de normalizacion independientes del modelo.
+- [metrics.py](src/atbcr_analysis/metrics.py): metricas por snapshot.
+- [config.py](src/atbcr_analysis/config.py): configuracion de escenarios, grafos, modelos, metricas y variantes.
+- [persistence.py](src/atbcr_analysis/persistence.py): escritura de resultados.
+- [analysis.py](src/atbcr_analysis/analysis.py): comparacion de distribuciones finales.
+- [plots.py](src/atbcr_analysis/plots.py): graficos desde CSV persistidos.
 
-Las clases de [config.py](C:/Users/dani_/Documents/GitHub/atbcr-analysis/src/atbcr_analysis/config.py)
+Las clases de [config.py](src/atbcr_analysis/config.py)
 usan Pydantic para validar la configuracion en la frontera del sistema. El
 motor de simulacion y los resultados siguen usando estructuras ligeras.
 
@@ -93,18 +93,22 @@ con `register_graph(...)`.
 
 La configuracion de metricas se agrupa en `MetricsConfig`:
 
-- `extremized_threshold`
+- `unbounded_extreme_cutoff`
 - `cluster_tolerance`
 - `record_every`
 - `store_opinion_snapshots`
+- `store_interaction_events`
 
 La extremizacion se define de forma explicita por dominio:
 
 - `bounded_01`: una opinion es extrema si `x <= 0.1` o `x >= 0.9`.
 - `bounded_m11`: una opinion es extrema si `abs(x) >= 0.8`, que es la imagen
   exacta de la regla anterior bajo `y = 2x - 1`.
-- `unbounded`: se usa `extremized_threshold` como corte configurable sobre
+- `unbounded`: se usa `unbounded_extreme_cutoff` como corte configurable sobre
   `abs(x)`, porque no hay extremos naturales del intervalo.
+
+`extremized_threshold` se mantiene temporalmente como alias de compatibilidad
+para `unbounded_extreme_cutoff`, pero solo afecta a la variante `unbounded`.
 
 `cluster_count` usa una regla 1D basada en ancla: se ordenan las opiniones, la
 primera opinion de un cluster queda como `anchor`, y las siguientes entran en
@@ -131,8 +135,10 @@ Cada snapshot guarda:
 - opiniones por agente, salvo que se use `--no-snapshots`.
 
 Las agregaciones Monte Carlo de `summary.csv` incluyen `mean`, `std`, `median` e
-IC95% de la media para las metricas finales principales. El IC95% usa la
-aproximacion normal `mean +/- 1.96 * sample_std / sqrt(n)`.
+IC95% de la media para las metricas finales principales, incluidas las
+frecuencias por ventana. El IC95% usa la aproximacion normal
+`mean +/- 1.96 * sample_std / sqrt(n)`. Con `runs = 1`, el IC95% se escribe como
+`NaN` porque la incertidumbre no es estimable con una sola replica.
 
 ## Reproducibilidad
 
@@ -222,8 +228,12 @@ scenario_grid:
 
 Hay presets listos para ejecutar en:
 
-- [experiments/article_figure_3.yaml](C:/Users/dani_/Documents/GitHub/atbcr-analysis/experiments/article_figure_3.yaml)
-- [experiments/article_sensitivity.yaml](C:/Users/dani_/Documents/GitHub/atbcr-analysis/experiments/article_sensitivity.yaml)
+- [experiments/article_figure_3.yaml](experiments/article_figure_3.yaml): producto cruzado
+  `epsilon = [0.2, 0.3, 0.4]` y `theta = [0.7, 0.8, 0.9]`.
+- [experiments/article_figure_3_diagonal.yaml](experiments/article_figure_3_diagonal.yaml):
+  tres casos diagonales para validaciones rapidas.
+- [experiments/article_sensitivity.yaml](experiments/article_sensitivity.yaml): barrido
+  `epsilon, theta` con paso `0.05` y condicion `epsilon < theta`.
 
 `workers` acepta un numero concreto o `max`/`auto` para usar todos los nucleos
 disponibles:
@@ -254,6 +264,10 @@ Normalizacion `signed-log` seguida de `max(abs(x))`:
 py -m atbcr_analysis.cli --scenarios repulsivo:0.2:0.7:0.1 --variants unbounded --normalizer signed_log_max_abs --normalization-every 100,500,1000 --output-dir runs/signed-log-sweep
 ```
 
+Cuando `--normalizer` no es `none`, `--normalization-every` es obligatorio y
+debe ser positivo. Esto evita ejecutar silenciosamente un experimento sin
+normalizacion por una configuracion incompleta.
+
 ## Inicializacion de opiniones
 
 Uniforme en un rango concreto:
@@ -279,6 +293,9 @@ Cada ejecucion escribe:
 - `snapshots.csv`: opiniones temporales por agente, con seeds efectivas.
 - `normalization_events.csv`: evento por normalizacion aplicada, con
   `max_abs_before`, `max_abs_after` y `scale` cuando aplica.
+- `interaction_events.csv`: eventos de interaccion si se activa
+  `--store-interaction-events`. Por defecto esta desactivado y no guarda
+  eventos `inaction`, porque no cambian opiniones y multiplican el volumen.
 - `config.json`: configuracion completa de la ejecucion, incluyendo escenarios,
   variantes, normalizadores y frecuencias.
 
@@ -287,14 +304,27 @@ Cada ejecucion escribe:
 El modulo `analysis.py` incluye distancia Wasserstein 1D empirica. Por defecto
 `atbcr-compare` compara variantes de forma pareada por seed: calcula una
 distancia por seed y resume `mean`, `std`, `median` e IC95%. Exige las mismas
-seeds y el mismo numero de agentes por seed. La comparacion agregada anterior,
-que mezcla todas las opiniones finales antes de comparar, sigue disponible con
-`--aggregate`.
+`run_seed`, `graph_seed`, `opinion_seed`, `dynamics_seed` y el mismo numero de
+agentes por seed. Ademas de `wasserstein.csv`, escribe
+`wasserstein_by_seed.csv` con las distancias individuales. La comparacion
+agregada anterior, que mezcla todas las opiniones finales antes de comparar,
+sigue disponible con `--aggregate`.
 
 ```powershell
 atbcr-compare runs/reference/snapshots.csv --output runs/reference/wasserstein.csv
 atbcr-compare runs/reference/snapshots.csv --aggregate --output runs/reference/wasserstein-aggregate.csv
 ```
+
+## Benchmark
+
+Para medir una aproximacion de rendimiento antes de lanzar campanas largas:
+
+```powershell
+py scripts/benchmark.py --agents 1000 --steps 100000 --runs 1 10 100
+```
+
+El script imprime segundos totales, segundos por run e interacciones por
+segundo. No contiene resultados hardcodeados.
 
 ## Plots
 

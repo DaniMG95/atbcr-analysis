@@ -9,6 +9,7 @@ from pathlib import Path
 
 from atbcr_analysis.analysis import (
     PairedWassersteinResult,
+    SeededFinalDistribution,
     pairwise_paired_wasserstein,
     pairwise_wasserstein,
 )
@@ -36,6 +37,10 @@ def main(argv: list[str] | None = None) -> int:
         distributions_by_seed = _read_final_distributions_by_seed(args.snapshots_csv)
         distances_by_seed = pairwise_paired_wasserstein(distributions_by_seed)
         _write_paired_distances(args.output, distances_by_seed)
+        _write_paired_distances_by_seed(
+            _by_seed_output_path(args.output),
+            distances_by_seed,
+        )
     return 0
 
 
@@ -76,7 +81,7 @@ def _read_final_distributions(path: Path) -> dict[str, list[float]]:
     return dict(distributions)
 
 
-def _read_final_distributions_by_seed(path: Path) -> dict[str, dict[int, list[float]]]:
+def _read_final_distributions_by_seed(path: Path) -> dict[str, dict[int, SeededFinalDistribution]]:
     rows: list[dict[str, str]]
     with path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
@@ -94,7 +99,8 @@ def _read_final_distributions_by_seed(path: Path) -> dict[str, dict[int, list[fl
         )
         max_step_by_run[key] = max(max_step_by_run.get(key, 0), int(row["step"]))
 
-    distributions: dict[str, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
+    opinions: dict[str, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
+    effective_seeds: dict[tuple[str, int], tuple[int | None, int | None, int | None]] = {}
     for row in rows:
         key = (
             row["scenario"],
@@ -109,10 +115,24 @@ def _read_final_distributions_by_seed(path: Path) -> dict[str, dict[int, list[fl
             f"{row['scenario']}/{row['variant']}/"
             f"{row['normalizer']}/{row['normalization_every']}"
         )
-        distributions[label][int(row["run_seed"])].append(float(row["opinion"]))
+        run_seed = int(row["run_seed"])
+        opinions[label][run_seed].append(float(row["opinion"]))
+        effective_seeds[(label, run_seed)] = (
+            _optional_int(row.get("graph_seed")),
+            _optional_int(row.get("opinion_seed")),
+            _optional_int(row.get("dynamics_seed")),
+        )
     return {
-        label: dict(seed_distributions)
-        for label, seed_distributions in distributions.items()
+        label: {
+            run_seed: SeededFinalDistribution(
+                opinions=values,
+                graph_seed=effective_seeds[(label, run_seed)][0],
+                opinion_seed=effective_seeds[(label, run_seed)][1],
+                dynamics_seed=effective_seeds[(label, run_seed)][2],
+            )
+            for run_seed, values in seed_distributions.items()
+        }
+        for label, seed_distributions in opinions.items()
     }
 
 
@@ -163,6 +183,39 @@ def _write_paired_distances(
                     "ci95_high": summary.ci95_high,
                 },
             )
+
+
+def _write_paired_distances_by_seed(
+    path: Path,
+    distances: dict[tuple[str, str], PairedWassersteinResult],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["first", "second", "run_seed", "wasserstein_distance"],
+        )
+        writer.writeheader()
+        for (first, second), result in distances.items():
+            for run_seed, distance in result.distances_by_seed.items():
+                writer.writerow(
+                    {
+                        "first": first,
+                        "second": second,
+                        "run_seed": run_seed,
+                        "wasserstein_distance": distance,
+                    },
+                )
+
+
+def _by_seed_output_path(summary_path: Path) -> Path:
+    return summary_path.with_name(f"{summary_path.stem}_by_seed{summary_path.suffix}")
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
 
 
 if __name__ == "__main__":

@@ -60,10 +60,15 @@ def _run_experiment(args: argparse.Namespace) -> None:
 
     graph = _build_graph_config(args)
     metrics = MetricsConfig(
-        extremized_threshold=args.extremized_threshold,
+        unbounded_extreme_cutoff=(
+            args.unbounded_extreme_cutoff
+            if args.unbounded_extreme_cutoff is not None
+            else args.extremized_threshold
+        ),
         cluster_tolerance=args.cluster_tolerance,
         record_every=args.record_every,
         store_opinion_snapshots=not args.no_snapshots,
+        store_interaction_events=args.store_interaction_events,
     )
     opinion_initializer = _build_initializer_config(args)
     base_simulation = SimulationConfig(
@@ -149,7 +154,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--graph-seed", type=int)
     parser.add_argument("--opinion-seed", type=int)
     parser.add_argument("--dynamics-seed", type=int)
-    parser.add_argument("--extremized-threshold", type=float, default=0.9)
+    parser.add_argument(
+        "--unbounded-extreme-cutoff",
+        type=float,
+        help="Cutoff for abs(opinion) extremization in the unbounded domain.",
+    )
+    parser.add_argument(
+        "--extremized-threshold",
+        type=float,
+        default=1.0,
+        help="Deprecated alias for --unbounded-extreme-cutoff.",
+    )
     parser.add_argument("--cluster-tolerance", type=float, default=0.001)
     parser.add_argument("--initializer", choices=["uniform", "binary_concern"], default="uniform")
     parser.add_argument("--initial-low", type=float, default=0.0)
@@ -167,6 +182,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalization-every", default="")
     parser.add_argument("--record-every", type=int, default=500)
     parser.add_argument("--no-snapshots", action="store_true")
+    parser.add_argument("--store-interaction-events", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     parser.add_argument("--output-dir", default="runs/experiment")
     return parser

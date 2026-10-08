@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 Adjacency = list[tuple[int, ...]]
 Edge = tuple[int, int]
+EdgeSequence = Sequence[Edge]
 
 
 class GraphGeneratorConfig(Protocol):

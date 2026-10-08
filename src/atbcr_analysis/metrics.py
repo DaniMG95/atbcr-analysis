@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -27,6 +28,7 @@ class StepMetrics:
     cluster_count: int
     configured_cluster_tolerance: float
     effective_cluster_tolerance: float
+    unbounded_extreme_cutoff: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,35 +160,52 @@ def summarize_values(values: list[float]) -> MetricSummary:
         raise ValueError("values cannot be empty")
     avg = mean(values)
     std = sample_std(values)
-    margin = 1.96 * std / (len(values) ** 0.5)
+    if len(values) == 1:
+        ci95_low = math.nan
+        ci95_high = math.nan
+    else:
+        margin = 1.96 * std / (len(values) ** 0.5)
+        ci95_low = avg - margin
+        ci95_high = avg + margin
     return MetricSummary(
         mean=avg,
         std=std,
         median=percentile(values, 50),
-        ci95_low=avg - margin,
-        ci95_high=avg + margin,
+        ci95_low=ci95_low,
+        ci95_high=ci95_high,
     )
 
 
-def extremized_share(opinions: list[float], threshold: float, domain: str) -> float:
+def extremized_share(
+    opinions: list[float],
+    unbounded_extreme_cutoff: float | None = None,
+    domain: str = "",
+    *,
+    threshold: float | None = None,
+) -> float:
     """Return the share of agents beyond the domain-specific extreme cutoff.
 
     For ``bounded_01`` the ATBCR article defines extremes as ``[0, 0.1]`` and
     ``[0.9, 1]``. Under ``y = 2x - 1`` this maps exactly to ``abs(y) >= 0.8``.
-    The unbounded domain has no natural endpoint, so its cutoff is the supplied
-    threshold.
+    The unbounded domain has no natural endpoint, so its cutoff is supplied as
+    ``unbounded_extreme_cutoff``. The keyword ``threshold`` is accepted as a
+    temporary compatibility alias.
     """
 
     if not opinions:
         raise ValueError("opinions cannot be empty")
-    if threshold < 0:
-        raise ValueError("extremized threshold must be non-negative")
+    if unbounded_extreme_cutoff is None:
+        unbounded_extreme_cutoff = threshold
+    if unbounded_extreme_cutoff is None:
+        raise ValueError("unbounded_extreme_cutoff is required")
+    if unbounded_extreme_cutoff < 0:
+        raise ValueError("unbounded_extreme_cutoff must be non-negative")
     if domain == "bounded_01":
         return sum(opinion <= 0.1 or opinion >= 0.9 for opinion in opinions) / len(opinions)
     if domain == "bounded_m11":
         return sum(abs(opinion) >= 0.8 for opinion in opinions) / len(opinions)
     if domain == "unbounded":
-        return sum(abs(opinion) >= threshold for opinion in opinions) / len(opinions)
+        return sum(abs(opinion) >= unbounded_extreme_cutoff for opinion in opinions) / len(opinions)
     raise ValueError(f"Unsupported domain: {domain}")
 
 
@@ -233,7 +252,7 @@ def summarize_step(
     window_counts: RuleCounts,
     *,
     window_size: int,
-    extremized_threshold: float,
+    unbounded_extreme_cutoff: float,
     cluster_tolerance: float,
     domain: str,
 ) -> StepMetrics:
@@ -255,10 +274,11 @@ def summarize_step(
         mean_abs_opinion=mean_abs(opinions),
         std_opinion=population_std(opinions),
         **percentiles,
-        extremized_share=extremized_share(opinions, extremized_threshold, domain),
+        extremized_share=extremized_share(opinions, unbounded_extreme_cutoff, domain),
         cluster_count=cluster_count(opinions, effective_tolerance),
         configured_cluster_tolerance=cluster_tolerance,
         effective_cluster_tolerance=effective_tolerance,
+        unbounded_extreme_cutoff=unbounded_extreme_cutoff,
     )
 
 

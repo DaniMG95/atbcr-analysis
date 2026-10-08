@@ -1,7 +1,13 @@
 scenarios:
-  - repulsivo:0.2:0.7:0.1
-  - intermedio:0.3:0.8:0.1
-  - confianza:0.4:0.9:0.1
+  - e0p2_t0p7:0.2:0.7:0.1
+  - e0p2_t0p8:0.2:0.8:0.1
+  - e0p2_t0p9:0.2:0.9:0.1
+  - e0p3_t0p7:0.3:0.7:0.1
+  - e0p3_t0p8:0.3:0.8:0.1
+  - e0p3_t0p9:0.3:0.9:0.1
+  - e0p4_t0p7:0.4:0.7:0.1
+  - e0p4_t0p8:0.4:0.8:0.1
+  - e0p4_t0p9:0.4:0.9:0.1
 variants:
   - baseline_01
 graph: complete

@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from atbcr_analysis.graphs import Adjacency, Edge
 
 InteractionOutcome = Literal["confidence", "inaction", "repulsion"]
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionEvent:
+    """One recorded pair interaction with before/after opinions."""
+
+    step: int
+    first_agent: int
+    second_agent: int
+    outcome: InteractionOutcome
+    first_opinion_before: float
+    second_opinion_before: float
+    first_opinion_after: float
+    second_opinion_after: float
 
 
 class OpinionDynamicsModel(Protocol):
@@ -21,7 +37,7 @@ class OpinionDynamicsModel(Protocol):
         self,
         opinions: list[float],
         adjacency: Adjacency,
-        edges: tuple[Edge, ...],
+        edges: Sequence[Edge],
         rng: random.Random,
     ) -> InteractionOutcome:
         """Apply one model-specific simulation step in place and return the applied rule."""

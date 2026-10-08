@@ -17,6 +17,9 @@ class Normalizer(Protocol):
     def normalize(self, opinions: list[float]) -> list[float]:
         """Return normalized opinions."""
 
+    def scale(self, opinions: list[float]) -> float | None:
+        """Return the final scaling factor used by normalize, when applicable."""
+
 
 @dataclass(frozen=True, slots=True)
 class NoNormalizer:
@@ -29,6 +32,9 @@ class NoNormalizer:
     def normalize(self, opinions: list[float]) -> list[float]:
         return opinions
 
+    def scale(self, opinions: list[float]) -> float | None:
+        return None
+
 
 @dataclass(frozen=True, slots=True)
 class MaxAbsNormalizer:
@@ -39,10 +45,13 @@ class MaxAbsNormalizer:
         return "max_abs"
 
     def normalize(self, opinions: list[float]) -> list[float]:
-        scale = max(abs(opinion) for opinion in opinions)
+        scale = self.scale(opinions)
         if scale == 0:
             return opinions
         return [opinion / scale for opinion in opinions]
+
+    def scale(self, opinions: list[float]) -> float:
+        return max(abs(opinion) for opinion in opinions)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +69,10 @@ class SignedLogMaxAbsNormalizer:
         ]
         return MaxAbsNormalizer().normalize(compressed)
 
+    def scale(self, opinions: list[float]) -> float:
+        compressed_abs = [math.log1p(abs(opinion)) for opinion in opinions]
+        return max(compressed_abs)
+
 
 @dataclass(frozen=True, slots=True)
 class NormalizationConfig:
@@ -67,6 +80,15 @@ class NormalizationConfig:
 
     kind: str = "none"
     every: int | None = None
+
+    def __post_init__(self) -> None:
+        normalized = self.kind.lower().replace("-", "_")
+        if normalized not in {"none", "max_abs", "signed_log", "signed_log_max_abs"}:
+            raise ValueError(f"Unsupported normalizer: {self.kind}")
+        if normalized != "none" and (self.every is None or self.every <= 0):
+            raise ValueError(
+                "normalization interval 'every' must be positive for active normalizers",
+            )
 
     def build(self) -> Normalizer:
         normalized = self.kind.lower().replace("-", "_")
@@ -79,9 +101,5 @@ class NormalizationConfig:
         raise ValueError(f"Unsupported normalizer: {self.kind}")
 
     def should_apply(self, step: int) -> bool:
-        return (
-            self.kind != "none"
-            and self.every is not None
-            and self.every > 0
-            and step % self.every == 0
-        )
+        normalized = self.kind.lower().replace("-", "_")
+        return normalized != "none" and self.every is not None and step % self.every == 0
