@@ -7,8 +7,24 @@ from dataclasses import dataclass
 from typing import Callable
 
 from atbcr_analysis.config import MonteCarloConfig, SimulationConfig
-from atbcr_analysis.metrics import mean
+from atbcr_analysis.metrics import MetricSummary, summarize_values
 from atbcr_analysis.simulation import SimulationResult, SimulationRunner
+
+
+FINAL_METRIC_NAMES: tuple[str, ...] = (
+    "confidence_frequency",
+    "inaction_frequency",
+    "repulsion_frequency",
+    "max_abs_opinion",
+    "mean_abs_opinion",
+    "std_opinion",
+    "extremized_share",
+    "cluster_count",
+    "p50_abs_opinion",
+    "p90_abs_opinion",
+    "p95_abs_opinion",
+    "p99_abs_opinion",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,15 +36,40 @@ class ExperimentResult:
     normalizer_name: str
     normalization_every: int | None
     runs: int
-    mean_confidence_frequency: float
-    mean_inaction_frequency: float
-    mean_repulsion_frequency: float
-    mean_max_abs_opinion: float
-    mean_abs_opinion: float
-    mean_std_opinion: float
-    mean_extremized_share: float
-    mean_cluster_count: float
+    metric_summaries: dict[str, MetricSummary]
     simulations: tuple[SimulationResult, ...]
+
+    @property
+    def mean_confidence_frequency(self) -> float:
+        return self.metric_summaries["confidence_frequency"].mean
+
+    @property
+    def mean_inaction_frequency(self) -> float:
+        return self.metric_summaries["inaction_frequency"].mean
+
+    @property
+    def mean_repulsion_frequency(self) -> float:
+        return self.metric_summaries["repulsion_frequency"].mean
+
+    @property
+    def mean_max_abs_opinion(self) -> float:
+        return self.metric_summaries["max_abs_opinion"].mean
+
+    @property
+    def mean_abs_opinion(self) -> float:
+        return self.metric_summaries["mean_abs_opinion"].mean
+
+    @property
+    def mean_std_opinion(self) -> float:
+        return self.metric_summaries["std_opinion"].mean
+
+    @property
+    def mean_extremized_share(self) -> float:
+        return self.metric_summaries["extremized_share"].mean
+
+    @property
+    def mean_cluster_count(self) -> float:
+        return self.metric_summaries["cluster_count"].mean
 
 
 def run_monte_carlo(
@@ -41,47 +82,80 @@ def run_monte_carlo(
 
     if monte_carlo_config.runs < 1:
         raise ValueError("runs must be positive")
-    seeds = [monte_carlo_config.seed + offset for offset in range(monte_carlo_config.runs)]
+    run_seeds = [
+        _run_seed_plan(monte_carlo_config, offset)
+        for offset in range(monte_carlo_config.runs)
+    ]
 
     if monte_carlo_config.workers <= 1:
         runner = SimulationRunner.from_config(simulation_config)
         completed_simulations: list[SimulationResult] = []
-        for seed in seeds:
-            completed_simulations.append(runner.run(seed))
+        for seed_plan in run_seeds:
+            completed_simulations.append(
+                runner.run(
+                    seed_plan.seed,
+                    graph_seed=seed_plan.graph_seed,
+                    opinion_seed=seed_plan.opinion_seed,
+                    dynamics_seed=seed_plan.dynamics_seed,
+                ),
+            )
             if progress_callback is not None:
-                progress_callback(len(completed_simulations), len(seeds))
+                progress_callback(len(completed_simulations), len(run_seeds))
         simulations = tuple(completed_simulations)
     else:
         completed_simulations = []
         with ProcessPoolExecutor(max_workers=monte_carlo_config.workers) as executor:
             for simulation in executor.map(
                 _simulate_worker,
-                [(simulation_config, seed) for seed in seeds],
+                [(simulation_config, seed_plan) for seed_plan in run_seeds],
             ):
                 completed_simulations.append(simulation)
                 if progress_callback is not None:
-                    progress_callback(len(completed_simulations), len(seeds))
+                    progress_callback(len(completed_simulations), len(run_seeds))
         simulations = tuple(completed_simulations)
 
     final_metrics = [run.final_metrics for run in simulations]
+    metric_summaries = {
+        metric_name: summarize_values(
+            [float(getattr(item, metric_name)) for item in final_metrics],
+        )
+        for metric_name in FINAL_METRIC_NAMES
+    }
     return ExperimentResult(
         scenario_name=simulation_config.name,
         variant_name=simulation_config.variant,
         normalizer_name=simulation_config.normalization.kind,
         normalization_every=simulation_config.normalization.every,
         runs=len(simulations),
-        mean_confidence_frequency=mean([item.confidence_frequency for item in final_metrics]),
-        mean_inaction_frequency=mean([item.inaction_frequency for item in final_metrics]),
-        mean_repulsion_frequency=mean([item.repulsion_frequency for item in final_metrics]),
-        mean_max_abs_opinion=mean([item.max_abs_opinion for item in final_metrics]),
-        mean_abs_opinion=mean([item.mean_abs_opinion for item in final_metrics]),
-        mean_std_opinion=mean([item.std_opinion for item in final_metrics]),
-        mean_extremized_share=mean([item.extremized_share for item in final_metrics]),
-        mean_cluster_count=mean([float(item.cluster_count) for item in final_metrics]),
+        metric_summaries=metric_summaries,
         simulations=simulations,
     )
 
 
-def _simulate_worker(args: tuple[SimulationConfig, int]) -> SimulationResult:
-    config, seed = args
-    return SimulationRunner.from_config(config).run(seed)
+@dataclass(frozen=True, slots=True)
+class RunSeedPlan:
+    """Master and optional phase-specific seeds for one Monte Carlo run."""
+
+    seed: int
+    graph_seed: int | None
+    opinion_seed: int | None
+    dynamics_seed: int | None
+
+
+def _run_seed_plan(config: MonteCarloConfig, offset: int) -> RunSeedPlan:
+    return RunSeedPlan(
+        seed=config.seed + offset,
+        graph_seed=None if config.graph_seed is None else config.graph_seed + offset,
+        opinion_seed=None if config.opinion_seed is None else config.opinion_seed + offset,
+        dynamics_seed=None if config.dynamics_seed is None else config.dynamics_seed + offset,
+    )
+
+
+def _simulate_worker(args: tuple[SimulationConfig, RunSeedPlan]) -> SimulationResult:
+    config, seed_plan = args
+    return SimulationRunner.from_config(config).run(
+        seed_plan.seed,
+        graph_seed=seed_plan.graph_seed,
+        opinion_seed=seed_plan.opinion_seed,
+        dynamics_seed=seed_plan.dynamics_seed,
+    )

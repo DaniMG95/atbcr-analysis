@@ -56,8 +56,8 @@ class ATBCRModel:
             raise ValueError("theta must be non-negative")
         if not 0 < self.config.mu <= 0.5:
             raise ValueError("mu must be in (0, 0.5]")
-        if self.config.epsilon > self.config.theta:
-            raise ValueError("epsilon should not be greater than theta")
+        if self.config.epsilon >= self.config.theta:
+            raise ValueError("epsilon must be strictly smaller than theta")
         if self.domain not in {"bounded_01", "bounded_m11", "unbounded"}:
             raise ValueError("domain must be bounded_01, bounded_m11, or unbounded")
 

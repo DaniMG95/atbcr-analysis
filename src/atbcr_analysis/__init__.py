@@ -33,7 +33,13 @@ from atbcr_analysis.normalizers import (
     SignedLogMaxAbsNormalizer,
 )
 from atbcr_analysis.models import ATBCRModel, ModelFactory, OpinionDynamicsModel, register_model
-from atbcr_analysis.simulation import SimulationResult, SimulationRunner, simulate_atbcr
+from atbcr_analysis.simulation import (
+    NormalizationEvent,
+    SimulationResult,
+    SimulationRunner,
+    simulate_atbcr,
+)
+from atbcr_analysis.metrics import MetricSummary
 
 __all__ = [
     "ATBCRModel",
@@ -48,12 +54,14 @@ __all__ = [
     "GraphFactory",
     "GraphConfig",
     "MetricsConfig",
+    "MetricSummary",
     "ModelConfig",
     "ModelFactory",
     "MonteCarloConfig",
     "MaxAbsNormalizer",
     "NoNormalizer",
     "NormalizationConfig",
+    "NormalizationEvent",
     "OpinionDynamicsModel",
     "OpinionInitializerConfig",
     "RingGraphConfig",

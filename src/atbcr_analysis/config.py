@@ -34,8 +34,8 @@ class ATBCRModelConfig(ModelConfig):
 
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> ATBCRModelConfig:
-        if self.epsilon > self.theta:
-            raise ValueError("epsilon should not be greater than theta")
+        if self.epsilon >= self.theta:
+            raise ValueError("epsilon must be strictly smaller than theta")
         return self
 
     def scale_thresholds(self, factor: float) -> ATBCRModelConfig:
@@ -240,6 +240,9 @@ class MonteCarloConfig(BaseModel):
 
     runs: int = Field(default=20, ge=1)
     seed: int = 7
+    graph_seed: int | None = None
+    opinion_seed: int | None = None
+    dynamics_seed: int | None = None
     workers: int = Field(default=1, ge=1)
 
 

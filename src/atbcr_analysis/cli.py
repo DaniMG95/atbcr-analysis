@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +77,14 @@ def _run_experiment(args: argparse.Namespace) -> None:
         opinion_initializer=opinion_initializer,
         normalization=NormalizationConfig(),
     )
-    monte_carlo = MonteCarloConfig(runs=args.runs, seed=args.seed, workers=args.workers)
+    monte_carlo = MonteCarloConfig(
+        runs=args.runs,
+        seed=args.seed,
+        graph_seed=args.graph_seed,
+        opinion_seed=args.opinion_seed,
+        dynamics_seed=args.dynamics_seed,
+        workers=args.workers,
+    )
 
     results: list[ExperimentResult] = []
     for scenario in scenarios:
@@ -138,6 +146,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runs", type=int, default=20)
     parser.add_argument("--workers", type=_parse_workers, default=1)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--graph-seed", type=int)
+    parser.add_argument("--opinion-seed", type=int)
+    parser.add_argument("--dynamics-seed", type=int)
     parser.add_argument("--extremized-threshold", type=float, default=0.9)
     parser.add_argument("--cluster-tolerance", type=float, default=0.001)
     parser.add_argument("--initializer", choices=["uniform", "binary_concern"], default="uniform")
@@ -268,6 +279,10 @@ def _normalize_config_mapping(
 ) -> dict[str, Any]:
     reserved = {"config", "experiments", *(reserved_keys or set())}
     normalized = {key.replace("-", "_"): value for key, value in config.items()}
+    if "scenario_grid" in normalized:
+        if "scenarios" in normalized:
+            raise ValueError("Use either 'scenarios' or 'scenario_grid', not both")
+        normalized["scenarios"] = _expand_scenario_grid(normalized.pop("scenario_grid"))
     parser = _build_parser()
     allowed = {
         action.dest
@@ -290,6 +305,49 @@ def _normalize_config_value(key: str, value: Any) -> Any:
     if key == "workers":
         return _parse_workers(value)
     return value
+
+
+def _expand_scenario_grid(grid: Any) -> str:
+    if not isinstance(grid, dict):
+        raise ValueError("YAML 'scenario_grid' must be a mapping")
+    epsilon = _decimal_range(grid.get("epsilon", {}), label="epsilon")
+    theta = _decimal_range(grid.get("theta", {}), label="theta")
+    mu = Decimal(str(grid.get("mu", "0.1")))
+    strict_epsilon_less_than_theta = bool(grid.get("epsilon_less_than_theta", True))
+    scenarios = []
+    for epsilon_value in epsilon:
+        for theta_value in theta:
+            if strict_epsilon_less_than_theta and epsilon_value >= theta_value:
+                continue
+            name = (
+                f"e{_decimal_name(epsilon_value)}"
+                f"_t{_decimal_name(theta_value)}"
+            )
+            scenarios.append(f"{name}:{epsilon_value}:{theta_value}:{mu}")
+    if not scenarios:
+        raise ValueError("scenario_grid did not produce any valid scenarios")
+    return ",".join(scenarios)
+
+
+def _decimal_range(config: Any, *, label: str) -> list[Decimal]:
+    if not isinstance(config, dict):
+        raise ValueError(f"YAML scenario_grid.{label} must be a mapping")
+    start = Decimal(str(config.get("start", 0)))
+    stop = Decimal(str(config.get("stop", 1)))
+    step = Decimal(str(config.get("step", "0.05")))
+    if step <= 0:
+        raise ValueError(f"YAML scenario_grid.{label}.step must be positive")
+    values: list[Decimal] = []
+    current = start
+    while current <= stop:
+        values.append(current)
+        current += step
+    return values
+
+
+def _decimal_name(value: Decimal) -> str:
+    text = format(value.normalize(), "f")
+    return text.replace("-", "m").replace(".", "p")
 
 
 def _args_from_mapping(

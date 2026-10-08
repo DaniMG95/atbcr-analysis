@@ -1,0 +1,15 @@
+scenarios:
+  - repulsivo:0.2:0.7:0.1
+  - intermedio:0.3:0.8:0.1
+  - confianza:0.4:0.9:0.1
+variants:
+  - baseline_01
+graph: complete
+agents: 1000
+steps: 100000
+runs: 1
+workers: max
+seed: 7
+record_every: 1000
+no_snapshots: false
+output_dir: runs/article-figure-3

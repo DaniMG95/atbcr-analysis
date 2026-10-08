@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import random
+import math
 from dataclasses import dataclass
 
 from atbcr_analysis.config import SimulationConfig
 from atbcr_analysis.graphs import graph_edges, generate_graph
-from atbcr_analysis.metrics import RuleCounts, StepMetrics, summarize_step
+from atbcr_analysis.metrics import RuleCounts, StepMetrics, max_abs, summarize_step
 from atbcr_analysis.models import build_model
 
 
@@ -24,9 +25,33 @@ class SimulationResult:
     """Result of one stochastic ATBCR run."""
 
     seed: int
+    graph_seed: int
+    opinion_seed: int
+    dynamics_seed: int
     final_metrics: StepMetrics
     trajectory: tuple[OpinionSnapshot, ...]
     final_opinions: tuple[float, ...]
+    normalization_events: tuple[NormalizationEvent, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationEvent:
+    """Diagnostics captured immediately around one normalization operation."""
+
+    step: int
+    normalizer: str
+    max_abs_before: float
+    max_abs_after: float
+    scale: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveSeeds:
+    """Concrete random seeds used by the three stochastic simulation phases."""
+
+    graph_seed: int
+    opinion_seed: int
+    dynamics_seed: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,38 +66,84 @@ class SimulationRunner:
 
         return cls(config=config)
 
-    def run(self, seed: int) -> SimulationResult:
+    def run(
+        self,
+        seed: int,
+        *,
+        graph_seed: int | None = None,
+        opinion_seed: int | None = None,
+        dynamics_seed: int | None = None,
+    ) -> SimulationResult:
         """Run a configured simulation."""
 
         _validate_config(self.config)
         model = build_model(self.config.model, domain=self.config.domain)
         initializer = self.config.opinion_initializer.build()
         model.validate()
-        rng = random.Random(seed)
-        adjacency = generate_graph(self.config.graph, rng)
+        effective_seeds = _resolve_seeds(
+            seed,
+            graph_seed=graph_seed,
+            opinion_seed=opinion_seed,
+            dynamics_seed=dynamics_seed,
+        )
+        graph_rng = random.Random(effective_seeds.graph_seed)
+        opinion_rng = random.Random(effective_seeds.opinion_seed)
+        dynamics_rng = random.Random(effective_seeds.dynamics_seed)
+        adjacency = generate_graph(self.config.graph, graph_rng)
         edges = graph_edges(adjacency)
         if not edges:
             raise ValueError("graph has no edges; choose a denser graph configuration")
 
-        opinions = initializer.initialize(self.config.graph.n_agents, rng)
+        opinions = initializer.initialize(self.config.graph.n_agents, opinion_rng)
         counts = RuleCounts()
         normalizer = self.config.normalization.build()
         trajectory: list[OpinionSnapshot] = []
-        _append_snapshot(trajectory, 0, opinions, counts, self.config)
+        normalization_events: list[NormalizationEvent] = []
+        last_snapshot_counts = RuleCounts()
+        last_snapshot_step = 0
+        _append_snapshot(
+            trajectory,
+            0,
+            opinions,
+            counts,
+            RuleCounts(),
+            window_size=self.config.metrics.record_every,
+            config=self.config,
+        )
 
         for step in range(1, self.config.steps + 1):
-            counts.add(model.step(opinions, adjacency, edges, rng))
+            counts.add(model.step(opinions, adjacency, edges, dynamics_rng))
             if self.config.normalization.should_apply(step):
-                opinions = normalizer.normalize(opinions)
+                event, opinions = _normalize_with_event(step, normalizer.name, opinions)
+                normalization_events.append(event)
             if step % self.config.metrics.record_every == 0 or step == self.config.steps:
-                _append_snapshot(trajectory, step, opinions, counts, self.config)
+                window_counts = counts.difference(last_snapshot_counts)
+                _append_snapshot(
+                    trajectory,
+                    step,
+                    opinions,
+                    counts,
+                    window_counts,
+                    window_size=step - last_snapshot_step,
+                    config=self.config,
+                )
+                last_snapshot_counts = RuleCounts(
+                    confidence=counts.confidence,
+                    inaction=counts.inaction,
+                    repulsion=counts.repulsion,
+                )
+                last_snapshot_step = step
 
         final_metrics = trajectory[-1].metrics
         return SimulationResult(
             seed=seed,
+            graph_seed=effective_seeds.graph_seed,
+            opinion_seed=effective_seeds.opinion_seed,
+            dynamics_seed=effective_seeds.dynamics_seed,
             final_metrics=final_metrics,
             trajectory=tuple(trajectory),
             final_opinions=tuple(opinions),
+            normalization_events=tuple(normalization_events),
         )
 
 
@@ -87,18 +158,82 @@ def _append_snapshot(
     step: int,
     opinions: list[float],
     counts: RuleCounts,
+    window_counts: RuleCounts,
+    *,
+    window_size: int,
     config: SimulationConfig,
 ) -> None:
     metrics = summarize_step(
         step,
         opinions,
         counts,
+        window_counts,
+        window_size=window_size,
         extremized_threshold=config.metrics.extremized_threshold,
         cluster_tolerance=config.metrics.cluster_tolerance,
         domain=config.domain,
     )
     snapshot = tuple(opinions) if config.metrics.store_opinion_snapshots else None
     trajectory.append(OpinionSnapshot(metrics=metrics, opinions=snapshot))
+
+
+def _resolve_seeds(
+    seed: int,
+    *,
+    graph_seed: int | None,
+    opinion_seed: int | None,
+    dynamics_seed: int | None,
+) -> EffectiveSeeds:
+    seed_rng = random.Random(seed)
+    return EffectiveSeeds(
+        graph_seed=graph_seed if graph_seed is not None else seed_rng.randrange(2**63),
+        opinion_seed=opinion_seed if opinion_seed is not None else seed_rng.randrange(2**63),
+        dynamics_seed=dynamics_seed if dynamics_seed is not None else seed_rng.randrange(2**63),
+    )
+
+
+def _normalize_with_event(
+    step: int,
+    normalizer_name: str,
+    opinions: list[float],
+) -> tuple[NormalizationEvent, list[float]]:
+    before = max_abs(opinions)
+    scale = _normalization_scale(normalizer_name, opinions)
+    if normalizer_name == "max_abs":
+        normalized = [opinion / before for opinion in opinions] if before else opinions
+    elif normalizer_name == "signed_log_max_abs":
+        compressed = [
+            math.copysign(math.log1p(abs(opinion)), opinion)
+            for opinion in opinions
+        ]
+        compressed_scale = max_abs(compressed)
+        normalized = (
+            [opinion / compressed_scale for opinion in compressed]
+            if compressed_scale
+            else compressed
+        )
+    else:
+        normalized = opinions
+    after = max_abs(normalized)
+    return (
+        NormalizationEvent(
+            step=step,
+            normalizer=normalizer_name,
+            max_abs_before=before,
+            max_abs_after=after,
+            scale=scale,
+        ),
+        normalized,
+    )
+
+
+def _normalization_scale(normalizer_name: str, opinions: list[float]) -> float | None:
+    if normalizer_name == "max_abs":
+        return max_abs(opinions)
+    if normalizer_name == "signed_log_max_abs":
+        compressed_abs = [math.log1p(abs(opinion)) for opinion in opinions]
+        return max(compressed_abs) if compressed_abs else None
+    return None
 
 
 def _validate_config(config: SimulationConfig) -> None:

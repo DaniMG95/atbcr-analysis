@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import unittest
+import csv
 import os
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from pydantic import ValidationError
+
 from atbcr_analysis import cli
 from atbcr_analysis import plot_cli
 from atbcr_analysis import plots
+from atbcr_analysis.analysis import paired_wasserstein_by_seed
 from atbcr_analysis.config import (
     ATBCRModelConfig,
     BarabasiAlbertGraphConfig,
+    CompleteGraphConfig,
     ErdosRenyiGraphConfig,
     MetricsConfig,
     ModelConfig,
@@ -22,8 +27,10 @@ from atbcr_analysis.config import (
 )
 from atbcr_analysis.experiments import run_monte_carlo
 from atbcr_analysis.graphs import generate_graph, graph_edges
-from atbcr_analysis.metrics import extremized_share
+from atbcr_analysis.metrics import cluster_count, extremized_share, percentile
 from atbcr_analysis.models import register_model
+from atbcr_analysis.normalizers import NormalizationConfig
+from atbcr_analysis.persistence import write_experiment_outputs
 from atbcr_analysis.simulation import SimulationRunner, simulate_atbcr
 
 
@@ -51,19 +58,164 @@ class GraphGenerationTests(unittest.TestCase):
 
 
 class SimulationTests(unittest.TestCase):
+    def test_atbcr_requires_epsilon_strictly_smaller_than_theta(self) -> None:
+        with self.assertRaises(ValidationError):
+            ATBCRModelConfig(epsilon=0.5, theta=0.5, mu=0.1)
+
     def test_extremized_share_uses_both_edges_for_unit_interval(self) -> None:
-        opinions = [0.01, 0.04, 0.50, 0.96, 0.99]
+        opinions = [0.0, 0.1, 0.11, 0.89, 0.9, 1.0]
 
-        share = extremized_share(opinions, threshold=0.9, domain="bounded_01")
+        share = extremized_share(opinions, threshold=123.0, domain="bounded_01")
 
-        self.assertEqual(share, 4 / 5)
+        self.assertEqual(share, 4 / 6)
 
     def test_extremized_share_uses_absolute_value_for_centered_domains(self) -> None:
-        opinions = [-0.95, -0.20, 0.20, 0.95]
+        opinions = [-0.81, -0.79, 0.00, 0.79, 0.80]
 
-        share = extremized_share(opinions, threshold=0.9, domain="bounded_m11")
+        share = extremized_share(opinions, threshold=123.0, domain="bounded_m11")
 
-        self.assertEqual(share, 2 / 4)
+        self.assertEqual(share, 2 / 5)
+
+    def test_extremized_share_uses_configurable_unbounded_cutoff(self) -> None:
+        opinions = [-2.0, -0.9, 0.0, 1.1, 3.0]
+
+        share = extremized_share(opinions, threshold=1.0, domain="unbounded")
+
+        self.assertEqual(share, 3 / 5)
+
+    def test_cluster_count_documents_anchor_rule(self) -> None:
+        opinions = [0.0, 0.0008, 0.0016]
+
+        self.assertEqual(cluster_count(opinions, tolerance=0.001), 2)
+
+    def test_percentile_interpolates_abs_opinion_statistics(self) -> None:
+        self.assertEqual(percentile([0.0, 10.0], 90), 9.0)
+
+    def test_baseline_01_and_bounded_m11_are_mathematically_equivalent(self) -> None:
+        scenario = ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1)
+        metrics = MetricsConfig(record_every=10, cluster_tolerance=0.001)
+        common = {
+            "name": "equivalence",
+            "graph": CompleteGraphConfig(n_agents=25),
+            "steps": 50,
+            "metrics": metrics,
+        }
+        baseline = SimulationConfig(
+            **common,
+            model=scenario,
+            variant="baseline_01",
+            domain="bounded_01",
+            opinion_initializer=UniformOpinionInitializerConfig(low=0.0, high=1.0),
+        )
+        centered = SimulationConfig(
+            **common,
+            model=scenario.scale_thresholds(2.0),
+            variant="bounded_m11",
+            domain="bounded_m11",
+            opinion_initializer=UniformOpinionInitializerConfig(low=-1.0, high=1.0),
+        )
+
+        baseline_result = simulate_atbcr(baseline, seed=123)
+        centered_result = simulate_atbcr(centered, seed=123)
+
+        self.assertEqual(baseline_result.graph_seed, centered_result.graph_seed)
+        self.assertEqual(baseline_result.opinion_seed, centered_result.opinion_seed)
+        self.assertEqual(baseline_result.dynamics_seed, centered_result.dynamics_seed)
+        for baseline_snapshot, centered_snapshot in zip(
+            baseline_result.trajectory,
+            centered_result.trajectory,
+            strict=True,
+        ):
+            self.assertIsNotNone(baseline_snapshot.opinions)
+            self.assertIsNotNone(centered_snapshot.opinions)
+            for x_opinion, y_opinion in zip(
+                baseline_snapshot.opinions or (),
+                centered_snapshot.opinions or (),
+                strict=True,
+            ):
+                self.assertAlmostEqual(y_opinion, 2 * x_opinion - 1)
+            self.assertAlmostEqual(
+                centered_snapshot.metrics.confidence_frequency,
+                baseline_snapshot.metrics.confidence_frequency,
+            )
+            self.assertAlmostEqual(
+                centered_snapshot.metrics.inaction_frequency,
+                baseline_snapshot.metrics.inaction_frequency,
+            )
+            self.assertAlmostEqual(
+                centered_snapshot.metrics.repulsion_frequency,
+                baseline_snapshot.metrics.repulsion_frequency,
+            )
+            self.assertEqual(
+                centered_snapshot.metrics.cluster_count,
+                baseline_snapshot.metrics.cluster_count,
+            )
+            self.assertAlmostEqual(
+                centered_snapshot.metrics.extremized_share,
+                baseline_snapshot.metrics.extremized_share,
+            )
+            self.assertEqual(centered_snapshot.metrics.effective_cluster_tolerance, 0.002)
+
+    def test_window_frequencies_use_snapshot_interval(self) -> None:
+        config = SimulationConfig(
+            name="window",
+            model=ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1),
+            graph=CompleteGraphConfig(n_agents=10),
+            steps=12,
+            metrics=MetricsConfig(record_every=5),
+        )
+
+        result = simulate_atbcr(config, seed=7)
+
+        for snapshot in result.trajectory[1:]:
+            metric = snapshot.metrics
+            total = (
+                metric.confidence_frequency_window
+                + metric.inaction_frequency_window
+                + metric.repulsion_frequency_window
+            )
+            self.assertAlmostEqual(total, 1.0)
+
+    def test_normalization_events_capture_before_after_and_scale(self) -> None:
+        config = SimulationConfig(
+            name="normalization",
+            model=ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1),
+            graph=CompleteGraphConfig(n_agents=10),
+            variant="unbounded",
+            domain="unbounded",
+            steps=4,
+            metrics=MetricsConfig(record_every=2),
+            opinion_initializer=UniformOpinionInitializerConfig(low=-2.0, high=2.0),
+            normalization=NormalizationConfig(kind="max_abs", every=2),
+        )
+
+        result = simulate_atbcr(config, seed=9)
+
+        self.assertEqual([event.step for event in result.normalization_events], [2, 4])
+        for event in result.normalization_events:
+            self.assertEqual(event.normalizer, "max_abs")
+            self.assertEqual(event.scale, event.max_abs_before)
+            self.assertAlmostEqual(event.max_abs_after, 1.0)
+
+    def test_runner_accepts_explicit_phase_seeds(self) -> None:
+        config = SimulationConfig(
+            name="seeds",
+            model=ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1),
+            graph=CompleteGraphConfig(n_agents=10),
+            steps=5,
+            metrics=MetricsConfig(record_every=5),
+        )
+
+        result = SimulationRunner.from_config(config).run(
+            1,
+            graph_seed=10,
+            opinion_seed=20,
+            dynamics_seed=30,
+        )
+
+        self.assertEqual(result.graph_seed, 10)
+        self.assertEqual(result.opinion_seed, 20)
+        self.assertEqual(result.dynamics_seed, 30)
 
     def test_simulation_keeps_opinions_in_unit_interval(self) -> None:
         config = SimulationConfig(
@@ -141,6 +293,7 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(result.runs, 3)
         self.assertEqual(len(result.simulations), 3)
         self.assertTrue(0 <= result.mean_extremized_share <= 1)
+        self.assertIn("p95_abs_opinion", result.metric_summaries)
 
     def test_monte_carlo_reports_progress_after_each_run(self) -> None:
         config = SimulationConfig(
@@ -161,6 +314,52 @@ class SimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(progress_calls, [(1, 3), (2, 3), (3, 3)])
+
+    def test_paired_wasserstein_requires_matching_seed_sets_and_summarizes(self) -> None:
+        result = paired_wasserstein_by_seed(
+            {1: [0.0, 1.0], 2: [0.0, 2.0]},
+            {1: [0.5, 1.5], 2: [1.0, 3.0]},
+        )
+
+        self.assertEqual(result.distances_by_seed, {1: 0.5, 2: 1.0})
+        self.assertAlmostEqual(result.summary.mean, 0.75)
+        self.assertAlmostEqual(result.summary.median, 0.75)
+        with self.assertRaises(ValueError):
+            paired_wasserstein_by_seed({1: [0.0]}, {2: [0.0]})
+
+    def test_persistence_includes_new_metrics_seeds_and_normalization_events(self) -> None:
+        config = SimulationConfig(
+            name="persist",
+            model=ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1),
+            graph=CompleteGraphConfig(n_agents=8),
+            variant="unbounded",
+            domain="unbounded",
+            steps=2,
+            metrics=MetricsConfig(record_every=1, store_opinion_snapshots=False),
+            opinion_initializer=UniformOpinionInitializerConfig(low=-2.0, high=2.0),
+            normalization=NormalizationConfig(kind="max_abs", every=1),
+        )
+        result = run_monte_carlo(config, MonteCarloConfig(runs=1, seed=10))
+        output_dir = Path("runs/test-persistence")
+
+        write_experiment_outputs(output_dir, [result], {"test": True})
+
+        with (output_dir / "trajectories.csv").open(newline="", encoding="utf-8") as handle:
+            trajectory_header = next(csv.reader(handle))
+        with (output_dir / "summary.csv").open(newline="", encoding="utf-8") as handle:
+            summary_header = next(csv.reader(handle))
+        with (output_dir / "normalization_events.csv").open(
+            newline="",
+            encoding="utf-8",
+        ) as handle:
+            event_rows = list(csv.DictReader(handle))
+        self.assertIn("confidence_frequency_window", trajectory_header)
+        self.assertIn("p95_abs_opinion", trajectory_header)
+        self.assertIn("graph_seed", trajectory_header)
+        self.assertIn("p95_abs_opinion_mean", summary_header)
+        self.assertIn("max_abs_opinion_ci95_high", summary_header)
+        self.assertEqual(len(event_rows), 2)
+        self.assertEqual(event_rows[0]["normalizer"], "max_abs")
 
 
 class SimulationCliConfigTests(unittest.TestCase):
@@ -235,6 +434,39 @@ class SimulationCliConfigTests(unittest.TestCase):
             [call.args[0] for call in write_outputs.call_args_list],
             [Path("runs/yaml-repulsivo"), Path("runs/yaml-confianza")],
         )
+
+    def test_yaml_config_expands_scenario_grid(self) -> None:
+        config_path = Path("runs/test-cli-scenario-grid.yaml")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "\n".join(
+                [
+                    "scenario_grid:",
+                    "  epsilon: {start: 0, stop: 0.05, step: 0.05}",
+                    "  theta: {start: 0, stop: 0.1, step: 0.05}",
+                    "  epsilon_less_than_theta: true",
+                    "  mu: 0.1",
+                    "variants: [baseline_01]",
+                    "steps: 10",
+                    "runs: 1",
+                    "agents: 5",
+                    "record_every: 10",
+                    "no_snapshots: true",
+                    "output_dir: runs/yaml-grid",
+                ],
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch("atbcr_analysis.cli.run_monte_carlo", return_value=_fake_experiment_result())
+            as run_experiment,
+            patch("atbcr_analysis.cli.write_experiment_outputs"),
+        ):
+            exit_code = cli.main(["--config", str(config_path)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(run_experiment.call_count, 3)
 
 
 class PlotCliTests(unittest.TestCase):

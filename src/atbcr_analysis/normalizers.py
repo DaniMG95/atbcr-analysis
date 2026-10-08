@@ -79,4 +79,9 @@ class NormalizationConfig:
         raise ValueError(f"Unsupported normalizer: {self.kind}")
 
     def should_apply(self, step: int) -> bool:
-        return self.kind != "none" and self.every is not None and self.every > 0 and step % self.every == 0
+        return (
+            self.kind != "none"
+            and self.every is not None
+            and self.every > 0
+            and step % self.every == 0
+        )

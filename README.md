@@ -22,6 +22,12 @@ epsilon' = 2 * epsilon
 theta' = 2 * theta
 ```
 
+La tolerancia de clusters tambien se interpreta como una distancia del dominio
+base `[0, 1]`: `cluster_tolerance=0.001` equivale a una tolerancia efectiva
+`0.002` en `[-1, 1]` y en la variante `unbounded`.
+
+El ATBCR se valida con la condicion estricta `epsilon < theta`.
+
 ## Escenarios
 
 El paquete no trae una campaña privilegiada. Los escenarios se pasan desde
@@ -92,6 +98,20 @@ La configuracion de metricas se agrupa en `MetricsConfig`:
 - `record_every`
 - `store_opinion_snapshots`
 
+La extremizacion se define de forma explicita por dominio:
+
+- `bounded_01`: una opinion es extrema si `x <= 0.1` o `x >= 0.9`.
+- `bounded_m11`: una opinion es extrema si `abs(x) >= 0.8`, que es la imagen
+  exacta de la regla anterior bajo `y = 2x - 1`.
+- `unbounded`: se usa `extremized_threshold` como corte configurable sobre
+  `abs(x)`, porque no hay extremos naturales del intervalo.
+
+`cluster_count` usa una regla 1D basada en ancla: se ordenan las opiniones, la
+primera opinion de un cluster queda como `anchor`, y las siguientes entran en
+ese cluster solo si estan a distancia menor o igual que la tolerancia efectiva
+respecto a ese `anchor`. Si no, abren un cluster nuevo y pasan a ser el nuevo
+`anchor`. No es una regla basada en gaps consecutivos.
+
 ## Metricas registradas
 
 Cada snapshot guarda:
@@ -99,12 +119,36 @@ Cada snapshot guarda:
 - frecuencia acumulada de confianza;
 - frecuencia acumulada de inaccion;
 - frecuencia acumulada de repulsion;
+- frecuencia local por ventana de confianza, inaccion y repulsion, calculada
+  entre snapshots;
 - `max(abs(opinions))`;
 - `mean(abs(opinions))`;
 - desviacion estandar;
+- percentiles `p50`, `p90`, `p95` y `p99` de `abs(opinions)`;
 - porcentaje de agentes extremizados;
 - numero de clusters;
+- tolerancia de clusters configurada y tolerancia efectiva;
 - opiniones por agente, salvo que se use `--no-snapshots`.
+
+Las agregaciones Monte Carlo de `summary.csv` incluyen `mean`, `std`, `median` e
+IC95% de la media para las metricas finales principales. El IC95% usa la
+aproximacion normal `mean +/- 1.96 * sample_std / sqrt(n)`.
+
+## Reproducibilidad
+
+Cada run conserva una `seed` maestra y tres seeds efectivas:
+
+- `graph_seed`
+- `opinion_seed`
+- `dynamics_seed`
+
+Si no se pasan explicitamente, se derivan de la seed maestra. Para comparaciones
+pareadas entre variantes, usa la misma `seed` o las mismas tres seeds explicitas
+en todas las variantes. El CLI permite fijarlas con:
+
+```powershell
+atbcr --seed 7 --graph-seed 100 --opinion-seed 200 --dynamics-seed 300
+```
 
 ## Instalacion local
 
@@ -165,6 +209,22 @@ experiments:
 Los flags del CLI sobrescriben el YAML, por ejemplo `atbcr --config
 experiments.yaml --seed 99`.
 
+Los YAML tambien aceptan `scenario_grid` para construir barridos reproducibles
+sin enumerar cada escenario manualmente:
+
+```yaml
+scenario_grid:
+  epsilon: {start: 0, stop: 1, step: 0.05}
+  theta: {start: 0, stop: 1, step: 0.05}
+  epsilon_less_than_theta: true
+  mu: 0.1
+```
+
+Hay presets listos para ejecutar en:
+
+- [experiments/article_figure_3.yaml](C:/Users/dani_/Documents/GitHub/atbcr-analysis/experiments/article_figure_3.yaml)
+- [experiments/article_sensitivity.yaml](C:/Users/dani_/Documents/GitHub/atbcr-analysis/experiments/article_sensitivity.yaml)
+
 `workers` acepta un numero concreto o `max`/`auto` para usar todos los nucleos
 disponibles:
 
@@ -212,19 +272,28 @@ py -m atbcr_analysis.cli --initializer binary_concern --initial-concern-share 0.
 
 Cada ejecucion escribe:
 
-- `summary.csv`: agregados finales por escenario, variante y normalizacion.
-- `trajectories.csv`: metricas temporales por replica.
-- `snapshots.csv`: opiniones temporales por agente.
+- `summary.csv`: estadistica descriptiva e IC95% de metricas finales por
+  escenario, variante y normalizacion.
+- `trajectories.csv`: metricas temporales por replica, incluyendo frecuencias
+  acumuladas, frecuencias por ventana, percentiles y seeds efectivas.
+- `snapshots.csv`: opiniones temporales por agente, con seeds efectivas.
+- `normalization_events.csv`: evento por normalizacion aplicada, con
+  `max_abs_before`, `max_abs_after` y `scale` cuando aplica.
 - `config.json`: configuracion completa de la ejecucion, incluyendo escenarios,
   variantes, normalizadores y frecuencias.
 
 ## Comparacion de distribuciones
 
-El modulo `analysis.py` incluye distancia Wasserstein 1D empirica para comparar
-distribuciones finales con semillas pareadas y mismo numero de muestras.
+El modulo `analysis.py` incluye distancia Wasserstein 1D empirica. Por defecto
+`atbcr-compare` compara variantes de forma pareada por seed: calcula una
+distancia por seed y resume `mean`, `std`, `median` e IC95%. Exige las mismas
+seeds y el mismo numero de agentes por seed. La comparacion agregada anterior,
+que mezcla todas las opiniones finales antes de comparar, sigue disponible con
+`--aggregate`.
 
 ```powershell
 atbcr-compare runs/reference/snapshots.csv --output runs/reference/wasserstein.csv
+atbcr-compare runs/reference/snapshots.csv --aggregate --output runs/reference/wasserstein-aggregate.csv
 ```
 
 ## Plots

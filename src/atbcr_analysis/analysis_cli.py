@@ -7,7 +7,11 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-from atbcr_analysis.analysis import pairwise_wasserstein
+from atbcr_analysis.analysis import (
+    PairedWassersteinResult,
+    pairwise_paired_wasserstein,
+    pairwise_wasserstein,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,11 +21,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("snapshots_csv", type=Path)
     parser.add_argument("--output", type=Path, default=Path("wasserstein.csv"))
+    parser.add_argument(
+        "--aggregate",
+        action="store_true",
+        help="Compare distributions after pooling all final opinions across seeds.",
+    )
     args = parser.parse_args(argv)
 
-    distributions = _read_final_distributions(args.snapshots_csv)
-    distances = pairwise_wasserstein(distributions)
-    _write_distances(args.output, distances)
+    if args.aggregate:
+        distributions = _read_final_distributions(args.snapshots_csv)
+        distances = pairwise_wasserstein(distributions)
+        _write_distances(args.output, distances)
+    else:
+        distributions_by_seed = _read_final_distributions_by_seed(args.snapshots_csv)
+        distances_by_seed = pairwise_paired_wasserstein(distributions_by_seed)
+        _write_paired_distances(args.output, distances_by_seed)
     return 0
 
 
@@ -54,9 +68,52 @@ def _read_final_distributions(path: Path) -> dict[str, list[float]]:
         )
         if int(row["step"]) != max_step_by_run[key]:
             continue
-        label = f"{row['scenario']}/{row['variant']}/{row['normalizer']}/{row['normalization_every']}"
+        label = (
+            f"{row['scenario']}/{row['variant']}/"
+            f"{row['normalizer']}/{row['normalization_every']}"
+        )
         distributions[label].append(float(row["opinion"]))
     return dict(distributions)
+
+
+def _read_final_distributions_by_seed(path: Path) -> dict[str, dict[int, list[float]]]:
+    rows: list[dict[str, str]]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError("snapshots file is empty")
+
+    max_step_by_run: dict[tuple[str, str, str, str, str], int] = {}
+    for row in rows:
+        key = (
+            row["scenario"],
+            row["variant"],
+            row["normalizer"],
+            row["normalization_every"],
+            row["run_seed"],
+        )
+        max_step_by_run[key] = max(max_step_by_run.get(key, 0), int(row["step"]))
+
+    distributions: dict[str, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        key = (
+            row["scenario"],
+            row["variant"],
+            row["normalizer"],
+            row["normalization_every"],
+            row["run_seed"],
+        )
+        if int(row["step"]) != max_step_by_run[key]:
+            continue
+        label = (
+            f"{row['scenario']}/{row['variant']}/"
+            f"{row['normalizer']}/{row['normalization_every']}"
+        )
+        distributions[label][int(row["run_seed"])].append(float(row["opinion"]))
+    return {
+        label: dict(seed_distributions)
+        for label, seed_distributions in distributions.items()
+    }
 
 
 def _write_distances(path: Path, distances: dict[tuple[str, str], float]) -> None:
@@ -70,6 +127,40 @@ def _write_distances(path: Path, distances: dict[tuple[str, str], float]) -> Non
                     "first": first,
                     "second": second,
                     "wasserstein_distance": distance,
+                },
+            )
+
+
+def _write_paired_distances(
+    path: Path,
+    distances: dict[tuple[str, str], PairedWassersteinResult],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "first",
+                "second",
+                "mean",
+                "std",
+                "median",
+                "ci95_low",
+                "ci95_high",
+            ],
+        )
+        writer.writeheader()
+        for (first, second), result in distances.items():
+            summary = result.summary
+            writer.writerow(
+                {
+                    "first": first,
+                    "second": second,
+                    "mean": summary.mean,
+                    "std": summary.std,
+                    "median": summary.median,
+                    "ci95_low": summary.ci95_low,
+                    "ci95_high": summary.ci95_high,
                 },
             )
 
