@@ -16,6 +16,23 @@ def graph_edges(adjacency: Sequence[Sequence[int]]) -> list[Edge]:
 
 
 @dataclass(frozen=True, slots=True)
+class CompleteGraphAdjacency(Adjacency):
+    """Lazy adjacency representation for a complete graph."""
+
+    n_agents: int
+
+    def __len__(self) -> int:
+        return self.n_agents
+
+    def __getitem__(self, index: int) -> tuple[int, ...]:
+        if index < 0:
+            index += self.n_agents
+        if index < 0 or index >= self.n_agents:
+            raise IndexError(index)
+        return tuple(agent for agent in range(self.n_agents) if agent != index)
+
+
+@dataclass(frozen=True, slots=True)
 class CompleteGraphEdges(EdgeSequence):
     """Lazy sequence of all undirected complete-graph edges."""
 
@@ -47,6 +64,14 @@ def complete_graph_edges(n_agents: int) -> CompleteGraphEdges:
     if n_agents < 2:
         raise ValueError("complete graph requires at least two agents")
     return CompleteGraphEdges(n_agents=n_agents)
+
+
+def complete_graph_adjacency(n_agents: int) -> CompleteGraphAdjacency:
+    """Return a lazy complete-graph adjacency sequence."""
+
+    if n_agents < 2:
+        raise ValueError("complete graph requires at least two agents")
+    return CompleteGraphAdjacency(n_agents=n_agents)
 
 
 def from_edges(n_agents: int, edges: Iterable[Edge]) -> Adjacency:

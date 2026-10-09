@@ -91,6 +91,11 @@ La construccion de grafos sigue el mismo patron que los modelos: `GraphFactory`
 usa el campo `kind` de la configuracion y permite registrar generadores nuevos
 con `register_graph(...)`.
 
+Para `CompleteGraphConfig`, la adjacency y la secuencia de aristas se representan
+de forma lazy. El ATBCR no necesita inspeccionar vecinos para actualizar un par,
+asi que una simulacion con `n_agents=1000` no materializa las relaciones O(N2)
+del grafo completo solo para seleccionar interacciones aleatorias.
+
 La configuracion de metricas se agrupa en `MetricsConfig`:
 
 - `unbounded_extreme_cutoff`
@@ -302,13 +307,23 @@ Cada ejecucion escribe:
 ## Comparacion de distribuciones
 
 El modulo `analysis.py` incluye distancia Wasserstein 1D empirica. Por defecto
-`atbcr-compare` compara variantes de forma pareada por seed: calcula una
-distancia por seed y resume `mean`, `std`, `median` e IC95%. Exige las mismas
-`run_seed`, `graph_seed`, `opinion_seed`, `dynamics_seed` y el mismo numero de
-agentes por seed. Ademas de `wasserstein.csv`, escribe
-`wasserstein_by_seed.csv` con las distancias individuales. La comparacion
-agregada anterior, que mezcla todas las opiniones finales antes de comparar,
-sigue disponible con `--aggregate`.
+`atbcr-compare` compara solo series cientificamente compatibles: mismo
+`scenario`, mismo dominio de opiniones y distinta combinacion
+`variant/normalizer/normalization_every`. Esto evita comparar silenciosamente
+distribuciones en `[0, 1]` contra distribuciones en `[-1, 1]`.
+
+El caso principal queda directo: comparar `unbounded/none` contra
+`unbounded/max_abs/k` y `unbounded/signed_log_max_abs/k` dentro del mismo
+escenario. La comparacion es pareada por seed: calcula una distancia por seed y
+resume `mean`, `std`, `median` e IC95%. Exige las mismas `run_seed`,
+`graph_seed`, `opinion_seed`, `dynamics_seed` y el mismo numero de agentes por
+seed. Ademas de `wasserstein.csv`, escribe `wasserstein_by_seed.csv` con las
+distancias individuales.
+
+La comparacion agregada anterior, que mezcla todas las opiniones finales antes
+de comparar, sigue disponible con `--aggregate`. Las comparaciones entre
+escenarios distintos o dominios distintos requieren opt-in explicito:
+`--cross-scenario` y `--allow-cross-domain`.
 
 ```powershell
 atbcr-compare runs/reference/snapshots.csv --output runs/reference/wasserstein.csv

@@ -14,7 +14,7 @@ graph: complete
 agents: 1000
 steps: 100000
 runs: 1
-workers: max
+workers: 1
 seed: 7
 record_every: 1000
 no_snapshots: false

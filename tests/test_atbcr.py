@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import yaml
 from pydantic import ValidationError
 
 from atbcr_analysis import analysis_cli
@@ -27,7 +28,12 @@ from atbcr_analysis.config import (
     UniformOpinionInitializerConfig,
 )
 from atbcr_analysis.experiments import run_monte_carlo
-from atbcr_analysis.graphs import complete_graph_edges, generate_graph, graph_edges
+from atbcr_analysis.graphs import (
+    CompleteGraphAdjacency,
+    complete_graph_edges,
+    generate_graph,
+    graph_edges,
+)
 from atbcr_analysis.metrics import cluster_count, extremized_share, percentile, summarize_values
 from atbcr_analysis.models import register_model
 from atbcr_analysis.normalizers import NormalizationConfig
@@ -48,7 +54,58 @@ def _fake_experiment_result() -> SimpleNamespace:
     )
 
 
+def _write_minimal_snapshot_series(
+    path: Path,
+    series: list[tuple[str, str, str, str, float]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "scenario",
+                "variant",
+                "normalizer",
+                "normalization_every",
+                "run_seed",
+                "graph_seed",
+                "opinion_seed",
+                "dynamics_seed",
+                "step",
+                "agent",
+                "opinion",
+            ],
+        )
+        writer.writeheader()
+        for scenario, variant, normalizer, normalization_every, offset in series:
+            for agent, opinion in enumerate([0.0 + offset, 1.0 + offset]):
+                writer.writerow(
+                    {
+                        "scenario": scenario,
+                        "variant": variant,
+                        "normalizer": normalizer,
+                        "normalization_every": normalization_every,
+                        "run_seed": 7,
+                        "graph_seed": 107,
+                        "opinion_seed": 207,
+                        "dynamics_seed": 307,
+                        "step": 10,
+                        "agent": agent,
+                        "opinion": opinion,
+                    },
+                )
+
+
 class GraphGenerationTests(unittest.TestCase):
+    def test_complete_graph_adjacency_is_lazy(self) -> None:
+        import random
+
+        graph = generate_graph(CompleteGraphConfig(n_agents=1000), random.Random(1))
+
+        self.assertIsInstance(graph, CompleteGraphAdjacency)
+        self.assertEqual(len(graph), 1000)
+        self.assertEqual(len(graph[0]), 999)
+
     def test_complete_graph_edges_are_lazy_and_cover_each_pair_once(self) -> None:
         edges = complete_graph_edges(4)
 
@@ -75,14 +132,14 @@ class SimulationTests(unittest.TestCase):
     def test_extremized_share_uses_both_edges_for_unit_interval(self) -> None:
         opinions = [0.0, 0.1, 0.11, 0.89, 0.9, 1.0]
 
-        share = extremized_share(opinions, threshold=123.0, domain="bounded_01")
+        share = extremized_share(opinions, domain="bounded_01")
 
         self.assertEqual(share, 4 / 6)
 
     def test_extremized_share_uses_absolute_value_for_centered_domains(self) -> None:
         opinions = [-0.81, -0.79, 0.00, 0.79, 0.80]
 
-        share = extremized_share(opinions, threshold=123.0, domain="bounded_m11")
+        share = extremized_share(opinions, domain="bounded_m11")
 
         self.assertEqual(share, 2 / 5)
 
@@ -92,6 +149,10 @@ class SimulationTests(unittest.TestCase):
         share = extremized_share(opinions, unbounded_extreme_cutoff=1.0, domain="unbounded")
 
         self.assertEqual(share, 3 / 5)
+        with self.assertRaises(ValueError):
+            extremized_share(opinions, domain="unbounded")
+        with self.assertRaises(ValueError):
+            extremized_share(opinions, unbounded_extreme_cutoff=-1.0, domain="unbounded")
 
     def test_legacy_extremized_threshold_config_maps_to_unbounded_cutoff(self) -> None:
         metrics = MetricsConfig(extremized_threshold=2.0)
@@ -229,10 +290,17 @@ class SimulationTests(unittest.TestCase):
             metrics=MetricsConfig(record_every=2),
         )
 
-        with patch("atbcr_analysis.simulation.graph_edges") as materialize_edges:
+        with (
+            patch("atbcr_analysis.simulation.graph_edges") as materialize_edges,
+            patch(
+                "atbcr_analysis.graphs.complete.from_edges",
+                create=True,
+            ) as materialize_adjacency,
+        ):
             result = simulate_atbcr(config, seed=1)
 
         materialize_edges.assert_not_called()
+        materialize_adjacency.assert_not_called()
         self.assertEqual(result.trajectory[-1].metrics.step, 2)
 
     def test_interaction_events_are_optional_and_skip_inaction(self) -> None:
@@ -394,7 +462,9 @@ class SimulationTests(unittest.TestCase):
         self.assertNotEqual(summary.ci95_low, summary.ci95_low)
         self.assertNotEqual(summary.ci95_high, summary.ci95_high)
 
-    def test_wasserstein_cli_writes_summary_and_by_seed_distances(self) -> None:
+    def test_wasserstein_cli_writes_summary_and_by_seed_distances_for_unbounded_normalizers(
+        self,
+    ) -> None:
         snapshots_path = Path("runs/test-wasserstein/snapshots.csv")
         snapshots_path.parent.mkdir(parents=True, exist_ok=True)
         with snapshots_path.open("w", newline="", encoding="utf-8") as handle:
@@ -415,15 +485,19 @@ class SimulationTests(unittest.TestCase):
                 ],
             )
             writer.writeheader()
-            for variant, offset in [("baseline_01", 0.0), ("bounded_m11", 0.5)]:
+            series = [
+                ("unbounded", "none", "", 0.0),
+                ("unbounded", "max_abs", "100", 0.5),
+            ]
+            for variant, normalizer, normalization_every, offset in series:
                 for run_seed in [7, 8]:
                     for agent, opinion in enumerate([0.0 + offset, 1.0 + offset]):
                         writer.writerow(
                             {
                                 "scenario": "s",
                                 "variant": variant,
-                                "normalizer": "none",
-                                "normalization_every": "",
+                                "normalizer": normalizer,
+                                "normalization_every": normalization_every,
                                 "run_seed": run_seed,
                                 "graph_seed": 100 + run_seed,
                                 "opinion_seed": 200 + run_seed,
@@ -448,6 +522,38 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(len(summary_rows), 1)
         self.assertEqual(len(by_seed_rows), 2)
         self.assertEqual(by_seed_rows[0]["wasserstein_distance"], "0.5")
+
+    def test_wasserstein_cli_skips_cross_scenario_by_default(self) -> None:
+        snapshots_path = Path("runs/test-wasserstein-cross-scenario/snapshots.csv")
+        _write_minimal_snapshot_series(
+            snapshots_path,
+            [
+                ("s1", "unbounded", "none", "", 0.0),
+                ("s2", "unbounded", "max_abs", "100", 0.5),
+            ],
+        )
+
+        output_path = snapshots_path.with_name("wasserstein.csv")
+        analysis_cli.main([str(snapshots_path), "--output", str(output_path)])
+
+        with output_path.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(list(csv.DictReader(handle)), [])
+
+    def test_wasserstein_cli_skips_incompatible_domains_by_default(self) -> None:
+        snapshots_path = Path("runs/test-wasserstein-cross-domain/snapshots.csv")
+        _write_minimal_snapshot_series(
+            snapshots_path,
+            [
+                ("s", "baseline_01", "none", "", 0.0),
+                ("s", "bounded_m11", "none", "", 0.5),
+            ],
+        )
+
+        output_path = snapshots_path.with_name("wasserstein.csv")
+        analysis_cli.main([str(snapshots_path), "--output", str(output_path)])
+
+        with output_path.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(list(csv.DictReader(handle)), [])
 
     def test_persistence_includes_new_metrics_seeds_and_normalization_events(self) -> None:
         config = SimulationConfig(
@@ -591,6 +697,14 @@ class SimulationCliConfigTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(run_experiment.call_count, 3)
+
+    def test_article_figure_3_preset_uses_single_worker_for_single_run(self) -> None:
+        with Path("experiments/article_figure_3.yaml").open(encoding="utf-8") as handle:
+            config = yaml.safe_load(handle)
+
+        self.assertEqual(config["runs"], 1)
+        self.assertEqual(config["workers"], 1)
+        self.assertEqual(len(config["scenarios"]), 9)
 
 
 class PlotCliTests(unittest.TestCase):

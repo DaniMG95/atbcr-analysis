@@ -6,7 +6,7 @@ import random
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-Adjacency = list[tuple[int, ...]]
+Adjacency = Sequence[Sequence[int]]
 Edge = tuple[int, int]
 EdgeSequence = Sequence[Edge]
 

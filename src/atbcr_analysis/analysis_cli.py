@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 import csv
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from atbcr_analysis.analysis import (
     PairedWassersteinResult,
     SeededFinalDistribution,
-    pairwise_paired_wasserstein,
-    pairwise_wasserstein,
+    paired_wasserstein_by_seed,
+    wasserstein_distance_1d,
 )
 
 
@@ -27,21 +28,60 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Compare distributions after pooling all final opinions across seeds.",
     )
+    parser.add_argument(
+        "--cross-scenario",
+        action="store_true",
+        help="Allow comparisons between different scenarios.",
+    )
+    parser.add_argument(
+        "--allow-cross-domain",
+        action="store_true",
+        help="Allow comparisons between variants that use different opinion domains.",
+    )
     args = parser.parse_args(argv)
 
     if args.aggregate:
         distributions = _read_final_distributions(args.snapshots_csv)
-        distances = pairwise_wasserstein(distributions)
+        distances = _pairwise_compatible_wasserstein(
+            distributions,
+            cross_scenario=args.cross_scenario,
+            allow_cross_domain=args.allow_cross_domain,
+        )
         _write_distances(args.output, distances)
     else:
         distributions_by_seed = _read_final_distributions_by_seed(args.snapshots_csv)
-        distances_by_seed = pairwise_paired_wasserstein(distributions_by_seed)
+        distances_by_seed = _pairwise_compatible_paired_wasserstein(
+            distributions_by_seed,
+            cross_scenario=args.cross_scenario,
+            allow_cross_domain=args.allow_cross_domain,
+        )
         _write_paired_distances(args.output, distances_by_seed)
         _write_paired_distances_by_seed(
             _by_seed_output_path(args.output),
             distances_by_seed,
         )
     return 0
+
+
+@dataclass(frozen=True, slots=True)
+class SeriesKey:
+    """Parsed identity of one persisted result series."""
+
+    label: str
+    scenario: str
+    variant: str
+    normalizer: str
+    normalization_every: str
+
+    @property
+    def domain(self) -> str:
+        if self.variant == "baseline_01":
+            return "bounded_01"
+        if self.variant == "bounded_m11":
+            return "bounded_m11"
+        if self.variant == "unbounded":
+            return "unbounded"
+        return self.variant
 
 
 def _read_final_distributions(path: Path) -> dict[str, list[float]]:
@@ -149,6 +189,101 @@ def _write_distances(path: Path, distances: dict[tuple[str, str], float]) -> Non
                     "wasserstein_distance": distance,
                 },
             )
+
+
+def _pairwise_compatible_wasserstein(
+    distributions: dict[str, list[float]],
+    *,
+    cross_scenario: bool,
+    allow_cross_domain: bool,
+) -> dict[tuple[str, str], float]:
+    return {
+        (first, second): wasserstein_distance_1d(
+            distributions[first],
+            distributions[second],
+        )
+        for first, second in _compatible_pairs(
+            distributions,
+            cross_scenario=cross_scenario,
+            allow_cross_domain=allow_cross_domain,
+        )
+    }
+
+
+def _pairwise_compatible_paired_wasserstein(
+    distributions: dict[str, dict[int, SeededFinalDistribution]],
+    *,
+    cross_scenario: bool,
+    allow_cross_domain: bool,
+) -> dict[tuple[str, str], PairedWassersteinResult]:
+    return {
+        (first, second): paired_wasserstein_by_seed(
+            distributions[first],
+            distributions[second],
+        )
+        for first, second in _compatible_pairs(
+            distributions,
+            cross_scenario=cross_scenario,
+            allow_cross_domain=allow_cross_domain,
+        )
+    }
+
+
+def _compatible_pairs(
+    distributions: dict[str, object],
+    *,
+    cross_scenario: bool,
+    allow_cross_domain: bool,
+) -> list[tuple[str, str]]:
+    keys = {label: _parse_series_label(label) for label in distributions}
+    labels = sorted(distributions)
+    pairs: list[tuple[str, str]] = []
+    for index, first_label in enumerate(labels):
+        for second_label in labels[index + 1:]:
+            if _series_are_compatible(
+                keys[first_label],
+                keys[second_label],
+                cross_scenario=cross_scenario,
+                allow_cross_domain=allow_cross_domain,
+            ):
+                pairs.append((first_label, second_label))
+    return pairs
+
+
+def _series_are_compatible(
+    first: SeriesKey,
+    second: SeriesKey,
+    *,
+    cross_scenario: bool,
+    allow_cross_domain: bool,
+) -> bool:
+    if not cross_scenario and first.scenario != second.scenario:
+        return False
+    if not allow_cross_domain and first.domain != second.domain:
+        return False
+    return (
+        first.variant,
+        first.normalizer,
+        first.normalization_every,
+    ) != (
+        second.variant,
+        second.normalizer,
+        second.normalization_every,
+    )
+
+
+def _parse_series_label(label: str) -> SeriesKey:
+    parts = label.split("/")
+    if len(parts) != 4:
+        raise ValueError(f"Unsupported series label format: {label}")
+    scenario, variant, normalizer, normalization_every = parts
+    return SeriesKey(
+        label=label,
+        scenario=scenario,
+        variant=variant,
+        normalizer=normalizer,
+        normalization_every=normalization_every,
+    )
 
 
 def _write_paired_distances(

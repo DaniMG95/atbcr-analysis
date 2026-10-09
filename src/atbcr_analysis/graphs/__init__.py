@@ -12,7 +12,13 @@ from atbcr_analysis.graphs.complete import build_complete_graph
 from atbcr_analysis.graphs.erdos_renyi import build_erdos_renyi_graph
 from atbcr_analysis.graphs.factory import GraphFactory, generate_graph, register_graph
 from atbcr_analysis.graphs.ring import build_ring_graph
-from atbcr_analysis.graphs.utils import CompleteGraphEdges, complete_graph_edges, graph_edges
+from atbcr_analysis.graphs.utils import (
+    CompleteGraphAdjacency,
+    CompleteGraphEdges,
+    complete_graph_adjacency,
+    complete_graph_edges,
+    graph_edges,
+)
 from atbcr_analysis.graphs.watts_strogatz import build_watts_strogatz_graph
 
 __all__ = [
@@ -20,6 +26,7 @@ __all__ = [
     "Edge",
     "EdgeSequence",
     "CompleteGraphEdges",
+    "CompleteGraphAdjacency",
     "GraphBuilder",
     "GraphFactory",
     "GraphGeneratorConfig",
@@ -30,6 +37,7 @@ __all__ = [
     "build_watts_strogatz_graph",
     "generate_graph",
     "complete_graph_edges",
+    "complete_graph_adjacency",
     "graph_edges",
     "register_graph",
 ]

@@ -199,7 +199,7 @@ def _append_snapshot(
 
 def _simulation_edges(
     config: SimulationConfig,
-    adjacency: list[tuple[int, ...]],
+    adjacency: object,
 ) -> EdgeSequence:
     if config.graph.kind == "complete":
         return complete_graph_edges(config.graph.n_agents)

@@ -179,7 +179,7 @@ def summarize_values(values: list[float]) -> MetricSummary:
 def extremized_share(
     opinions: list[float],
     unbounded_extreme_cutoff: float | None = None,
-    domain: str = "",
+    domain: str = "bounded_01",
     *,
     threshold: float | None = None,
 ) -> float:
@@ -194,17 +194,17 @@ def extremized_share(
 
     if not opinions:
         raise ValueError("opinions cannot be empty")
-    if unbounded_extreme_cutoff is None:
-        unbounded_extreme_cutoff = threshold
-    if unbounded_extreme_cutoff is None:
-        raise ValueError("unbounded_extreme_cutoff is required")
-    if unbounded_extreme_cutoff < 0:
-        raise ValueError("unbounded_extreme_cutoff must be non-negative")
     if domain == "bounded_01":
         return sum(opinion <= 0.1 or opinion >= 0.9 for opinion in opinions) / len(opinions)
     if domain == "bounded_m11":
         return sum(abs(opinion) >= 0.8 for opinion in opinions) / len(opinions)
     if domain == "unbounded":
+        if unbounded_extreme_cutoff is None:
+            unbounded_extreme_cutoff = threshold
+        if unbounded_extreme_cutoff is None:
+            raise ValueError("unbounded_extreme_cutoff is required for unbounded domain")
+        if unbounded_extreme_cutoff < 0:
+            raise ValueError("unbounded_extreme_cutoff must be non-negative")
         return sum(abs(opinion) >= unbounded_extreme_cutoff for opinion in opinions) / len(opinions)
     raise ValueError(f"Unsupported domain: {domain}")
 

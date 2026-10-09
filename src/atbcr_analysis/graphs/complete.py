@@ -6,7 +6,7 @@ import random
 
 from atbcr_analysis.config import CompleteGraphConfig
 from atbcr_analysis.graphs.base import Adjacency, GraphGeneratorConfig
-from atbcr_analysis.graphs.utils import from_edges
+from atbcr_analysis.graphs.utils import complete_graph_adjacency
 
 
 def build_complete_graph(config: GraphGeneratorConfig, rng: random.Random) -> Adjacency:
@@ -14,7 +14,4 @@ def build_complete_graph(config: GraphGeneratorConfig, rng: random.Random) -> Ad
 
     if not isinstance(config, CompleteGraphConfig):
         raise TypeError("complete graph requires CompleteGraphConfig")
-    return from_edges(
-        config.n_agents,
-        ((i, j) for i in range(config.n_agents) for j in range(i + 1, config.n_agents)),
-    )
+    return complete_graph_adjacency(config.n_agents)
