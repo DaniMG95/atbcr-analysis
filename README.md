@@ -52,13 +52,14 @@ Por ejemplo, los primeros escenarios del articulo se pueden lanzar como:
 - [simulation.py](src/atbcr_analysis/simulation.py): motor generico de simulacion.
 - [normalizers.py](src/atbcr_analysis/normalizers.py): politicas de normalizacion independientes del modelo.
 - [metrics.py](src/atbcr_analysis/metrics.py): metricas por snapshot.
-- [config.py](src/atbcr_analysis/config.py): configuracion de escenarios, grafos, modelos, metricas y variantes.
+- [config](src/atbcr_analysis/config): schemas de configuracion de escenarios,
+  grafos, modelos, metricas, variantes y archivos YAML.
 - [persistence.py](src/atbcr_analysis/persistence.py): escritura de resultados.
 - [analysis.py](src/atbcr_analysis/analysis.py): comparacion de distribuciones finales.
 - [plots.py](src/atbcr_analysis/plots.py): graficos desde CSV persistidos.
 
-Las clases de [config.py](src/atbcr_analysis/config.py)
-usan Pydantic para validar la configuracion en la frontera del sistema. El
+Las clases de [config](src/atbcr_analysis/config) usan Pydantic para validar
+la configuracion en la frontera del sistema. El
 motor de simulacion y los resultados siguen usando estructuras ligeras.
 
 La seleccion de modelo se hace con `SimulationConfig`, `ScenarioConfig`,
@@ -173,24 +174,32 @@ py -m pip install -e .
 py -m atbcr_analysis.cli --scenarios repulsivo:0.2:0.7:0.1,intermedio:0.3:0.8:0.1,confianza:0.4:0.9:0.1 --output-dir runs/article-scenarios
 ```
 
-Tambien se puede lanzar la misma configuracion desde YAML. Los nombres de las
-claves coinciden con los flags del CLI, pero usando guion bajo en vez de guion:
+Tambien se puede lanzar la misma configuracion desde YAML. El fichero tiene un
+schema propio y no reutiliza la sintaxis compacta de los flags del CLI:
 
 ```yaml
-scenarios:
-  - repulsivo:0.2:0.7:0.1
-  - intermedio:0.3:0.8:0.1
-  - confianza:0.4:0.9:0.1
-variants:
-  - baseline_01
-  - bounded_m11
-  - unbounded
-steps: 13500
-runs: 20
-workers: max
-seed: 7
-record_every: 500
-output_dir: runs/article-scenarios
+experiments:
+  - scenarios:
+      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}
+      - {name: intermedio, epsilon: 0.3, theta: 0.8, mu: 0.1}
+      - {name: confianza, epsilon: 0.4, theta: 0.9, mu: 0.1}
+    variants:
+      - name: baseline_01
+        domain: bounded_01
+        initializer: {kind: uniform, low: 0.0, high: 1.0}
+      - name: bounded_m11
+        domain: bounded_m11
+        threshold_scale: 2.0
+        initializer: {kind: uniform, low: -1.0, high: 1.0}
+      - name: unbounded
+        domain: unbounded
+        threshold_scale: 2.0
+        initializer: {kind: uniform, low: -1.0, high: 1.0}
+    graph: {kind: complete, n_agents: 1000}
+    steps: 13500
+    metrics: {record_every: 500}
+    monte_carlo: {runs: 20, workers: max, seed: 7}
+    output_dir: runs/article-scenarios
 ```
 
 ```powershell
@@ -201,34 +210,51 @@ Para lanzar varias pruebas seguidas, usa `defaults` y `experiments`:
 
 ```yaml
 defaults:
-  variants: [unbounded]
+  variants:
+    - name: unbounded
+      domain: unbounded
+      threshold_scale: 2.0
+      initializer: {kind: uniform, low: -1.0, high: 1.0}
   steps: 13500
-  runs: 20
-  record_every: 500
+  metrics: {record_every: 500}
+  monte_carlo: {runs: 20}
 
 experiments:
-  - scenarios: [repulsivo:0.2:0.7:0.1]
-    normalizer: max_abs
-    normalization_every: [100, 500, 1000]
+  - scenarios:
+      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}
+    normalizations:
+      - {kind: max_abs, every: 100}
+      - {kind: max_abs, every: 500}
+      - {kind: max_abs, every: 1000}
     output_dir: runs/max-abs-repulsivo
-  - scenarios: [repulsivo:0.2:0.7:0.1]
-    normalizer: signed_log_max_abs
-    normalization_every: [100, 500, 1000]
+  - scenarios:
+      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}
+    normalizations:
+      - {kind: signed_log_max_abs, every: 100}
+      - {kind: signed_log_max_abs, every: 500}
+      - {kind: signed_log_max_abs, every: 1000}
     output_dir: runs/signed-log-repulsivo
 ```
-
-Los flags del CLI sobrescriben el YAML, por ejemplo `atbcr --config
-experiments.yaml --seed 99`.
 
 Los YAML tambien aceptan `scenario_grid` para construir barridos reproducibles
 sin enumerar cada escenario manualmente:
 
 ```yaml
-scenario_grid:
-  epsilon: {start: 0, stop: 1, step: 0.05}
-  theta: {start: 0, stop: 1, step: 0.05}
-  epsilon_less_than_theta: true
-  mu: 0.1
+experiments:
+  - scenario_grid:
+      epsilon: {start: 0, stop: 1, step: 0.05}
+      theta: {start: 0, stop: 1, step: 0.05}
+      epsilon_less_than_theta: true
+      mu: 0.1
+    variants:
+      - name: baseline_01
+        domain: bounded_01
+        initializer: {kind: uniform, low: 0.0, high: 1.0}
+    graph: {kind: complete, n_agents: 1000}
+    steps: 100000
+    metrics: {record_every: 1000}
+    monte_carlo: {runs: 100, workers: max, seed: 7}
+    output_dir: runs/article-sensitivity
 ```
 
 Hay presets listos para ejecutar en:

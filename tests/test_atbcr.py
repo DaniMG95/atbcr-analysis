@@ -593,23 +593,24 @@ class SimulationTests(unittest.TestCase):
 
 
 class SimulationCliConfigTests(unittest.TestCase):
-    def test_yaml_config_runs_single_experiment_and_allows_cli_overrides(self) -> None:
+    def test_yaml_config_runs_single_schema_experiment(self) -> None:
         config_path = Path("runs/test-cli-config.yaml")
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(
             "\n".join(
                 [
-                    "scenarios:",
-                    "  - repulsivo:0.2:0.7:0.1",
-                    "variants:",
-                    "  - baseline_01",
-                    "steps: 10",
-                    "runs: 1",
-                    "workers: max",
-                    "agents: 5",
-                    "record_every: 10",
-                    "no_snapshots: true",
-                    "output_dir: runs/yaml-single",
+                    "experiments:",
+                    "  - scenarios:",
+                    "      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}",
+                    "    variants:",
+                    "      - name: baseline_01",
+                    "        domain: bounded_01",
+                    "        initializer: {kind: uniform, low: 0.0, high: 1.0}",
+                    "    graph: {kind: complete, n_agents: 5}",
+                    "    steps: 10",
+                    "    metrics: {record_every: 10, store_opinion_snapshots: false}",
+                    "    monte_carlo: {runs: 1, workers: max, seed: 99}",
+                    "    output_dir: runs/yaml-single",
                 ],
             ),
             encoding="utf-8",
@@ -620,7 +621,7 @@ class SimulationCliConfigTests(unittest.TestCase):
             as run_experiment,
             patch("atbcr_analysis.cli.write_experiment_outputs") as write_outputs,
         ):
-            exit_code = cli.main(["--config", str(config_path), "--seed", "99"])
+            exit_code = cli.main(["--config", str(config_path)])
 
         self.assertEqual(exit_code, 0)
         _, monte_carlo = run_experiment.call_args.args
@@ -636,17 +637,21 @@ class SimulationCliConfigTests(unittest.TestCase):
         config_path.write_text(
             "\n".join(
                 [
-                    "steps: 10",
-                    "agents: 5",
                     "defaults:",
-                    "  variants: [baseline_01]",
-                    "  runs: 1",
-                    "  record_every: 10",
-                    "  no_snapshots: true",
+                    "  variants:",
+                    "    - name: baseline_01",
+                    "      domain: bounded_01",
+                    "      initializer: {kind: uniform, low: 0.0, high: 1.0}",
+                    "  graph: {kind: complete, n_agents: 5}",
+                    "  steps: 10",
+                    "  metrics: {record_every: 10, store_opinion_snapshots: false}",
+                    "  monte_carlo: {runs: 1}",
                     "experiments:",
-                    "  - scenarios: [repulsivo:0.2:0.7:0.1]",
+                    "  - scenarios:",
+                    "      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}",
                     "    output_dir: runs/yaml-repulsivo",
-                    "  - scenarios: [confianza:0.4:0.9:0.1]",
+                    "  - scenarios:",
+                    "      - {name: confianza, epsilon: 0.4, theta: 0.9, mu: 0.1}",
                     "    output_dir: runs/yaml-confianza",
                 ],
             ),
@@ -671,18 +676,21 @@ class SimulationCliConfigTests(unittest.TestCase):
         config_path.write_text(
             "\n".join(
                 [
-                    "scenario_grid:",
-                    "  epsilon: {start: 0, stop: 0.05, step: 0.05}",
-                    "  theta: {start: 0, stop: 0.1, step: 0.05}",
-                    "  epsilon_less_than_theta: true",
-                    "  mu: 0.1",
-                    "variants: [baseline_01]",
-                    "steps: 10",
-                    "runs: 1",
-                    "agents: 5",
-                    "record_every: 10",
-                    "no_snapshots: true",
-                    "output_dir: runs/yaml-grid",
+                    "experiments:",
+                    "  - scenario_grid:",
+                    "      epsilon: {start: 0, stop: 0.05, step: 0.05}",
+                    "      theta: {start: 0, stop: 0.1, step: 0.05}",
+                    "      epsilon_less_than_theta: true",
+                    "      mu: 0.1",
+                    "    variants:",
+                    "      - name: baseline_01",
+                    "        domain: bounded_01",
+                    "        initializer: {kind: uniform, low: 0.0, high: 1.0}",
+                    "    graph: {kind: complete, n_agents: 5}",
+                    "    steps: 10",
+                    "    metrics: {record_every: 10, store_opinion_snapshots: false}",
+                    "    monte_carlo: {runs: 1}",
+                    "    output_dir: runs/yaml-grid",
                 ],
             ),
             encoding="utf-8",
@@ -698,13 +706,59 @@ class SimulationCliConfigTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(run_experiment.call_count, 3)
 
+    def test_yaml_schema_accepts_structured_experiment_config(self) -> None:
+        config_path = Path("runs/test-cli-structured-config.yaml")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "\n".join(
+                [
+                    "experiments:",
+                    "  - scenarios:",
+                    "      - {name: repulsivo, epsilon: 0.2, theta: 0.7, mu: 0.1}",
+                    "    variants:",
+                    "      - name: unbounded_custom",
+                    "        domain: unbounded",
+                    "        threshold_scale: 2.0",
+                    "        initializer: {kind: uniform, low: -1.0, high: 1.0}",
+                    "    graph: {kind: erdos_renyi, n_agents: 5, er_probability: 0.5}",
+                    "    steps: 10",
+                    "    metrics:",
+                    "      record_every: 10",
+                    "      store_opinion_snapshots: false",
+                    "    monte_carlo: {runs: 1, seed: 11, workers: 1}",
+                    "    normalizations:",
+                    "      - {kind: max_abs, every: 5}",
+                    "    output_dir: runs/yaml-structured",
+                ],
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch("atbcr_analysis.cli.run_monte_carlo", return_value=_fake_experiment_result())
+            as run_experiment,
+            patch("atbcr_analysis.cli.write_experiment_outputs") as write_outputs,
+        ):
+            exit_code = cli.main(["--config", str(config_path)])
+
+        self.assertEqual(exit_code, 0)
+        simulation, monte_carlo = run_experiment.call_args.args[:2]
+        self.assertIsInstance(simulation.graph, ErdosRenyiGraphConfig)
+        self.assertEqual(simulation.graph.n_agents, 5)
+        self.assertEqual(simulation.normalization.kind, "max_abs")
+        self.assertEqual(simulation.normalization.every, 5)
+        self.assertFalse(simulation.metrics.store_opinion_snapshots)
+        self.assertEqual(monte_carlo.seed, 11)
+        self.assertEqual(write_outputs.call_args.args[0], Path("runs/yaml-structured"))
+
     def test_article_figure_3_preset_uses_single_worker_for_single_run(self) -> None:
         with Path("experiments/article_figure_3.yaml").open(encoding="utf-8") as handle:
             config = yaml.safe_load(handle)
 
-        self.assertEqual(config["runs"], 1)
-        self.assertEqual(config["workers"], 1)
-        self.assertEqual(len(config["scenarios"]), 9)
+        experiment = config["experiments"][0]
+        self.assertEqual(experiment["monte_carlo"]["runs"], 100)
+        self.assertEqual(experiment["monte_carlo"]["workers"], 1)
+        self.assertEqual(len(experiment["scenarios"]), 9)
 
 
 class PlotCliTests(unittest.TestCase):
