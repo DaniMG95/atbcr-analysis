@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
 
 from atbcr_analysis.config import MonteCarloConfig, SimulationConfig
@@ -80,6 +81,7 @@ def run_monte_carlo(
     monte_carlo_config: MonteCarloConfig,
     *,
     progress_callback: Callable[[int, int], None] | None = None,
+    step_progress_callback: Callable[[int, int, int, int], None] | None = None,
 ) -> ExperimentResult:
     """Run independent stochastic simulations and aggregate their outputs."""
 
@@ -93,13 +95,19 @@ def run_monte_carlo(
     if monte_carlo_config.workers <= 1:
         runner = SimulationRunner.from_config(simulation_config)
         completed_simulations: list[SimulationResult] = []
-        for seed_plan in run_seeds:
+        for run_number, seed_plan in enumerate(run_seeds, start=1):
+            simulation_progress = (
+                None
+                if step_progress_callback is None
+                else partial(step_progress_callback, run_number, len(run_seeds))
+            )
             completed_simulations.append(
                 runner.run(
                     seed_plan.seed,
                     graph_seed=seed_plan.graph_seed,
                     opinion_seed=seed_plan.opinion_seed,
                     dynamics_seed=seed_plan.dynamics_seed,
+                    progress_callback=simulation_progress,
                 ),
             )
             if progress_callback is not None:
@@ -113,6 +121,13 @@ def run_monte_carlo(
                 [(simulation_config, seed_plan) for seed_plan in run_seeds],
             ):
                 completed_simulations.append(simulation)
+                if step_progress_callback is not None:
+                    step_progress_callback(
+                        len(completed_simulations),
+                        len(run_seeds),
+                        simulation_config.steps,
+                        simulation_config.steps,
+                    )
                 if progress_callback is not None:
                     progress_callback(len(completed_simulations), len(run_seeds))
         simulations = tuple(completed_simulations)

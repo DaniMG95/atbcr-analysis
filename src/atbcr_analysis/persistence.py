@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import tempfile
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,28 @@ from typing import Any
 from pydantic import BaseModel
 
 from atbcr_analysis.experiments import FINAL_METRIC_NAMES, ExperimentResult
+
+
+_SNAPSHOT_FIELDNAMES = [
+    "scenario",
+    "variant",
+    "normalizer",
+    "normalization_every",
+    "run_seed",
+    "graph_seed",
+    "opinion_seed",
+    "dynamics_seed",
+    "step",
+    "agent",
+    "opinion",
+]
+_SNAPSHOT_RUN_COLUMNS = (
+    "scenario",
+    "variant",
+    "normalizer",
+    "normalization_every",
+    "run_seed",
+)
 
 
 def write_experiment_outputs(
@@ -24,6 +47,7 @@ def write_experiment_outputs(
     write_summary_csv(output_dir / "summary.csv", results)
     write_trajectories_csv(output_dir / "trajectories.csv", results)
     write_snapshots_csv(output_dir / "snapshots.csv", results)
+    write_final_opinions_csv(output_dir / "final_opinions.csv", results)
     write_normalization_events_csv(output_dir / "normalization_events.csv", results)
     write_interaction_events_csv(output_dir / "interaction_events.csv", results)
     write_json(output_dir / "config.json", _to_jsonable(config))
@@ -119,29 +143,34 @@ def write_trajectories_csv(path: Path, results: list[ExperimentResult]) -> None:
 
 
 def write_snapshots_csv(path: Path, results: list[ExperimentResult]) -> None:
+    _write_snapshots_csv(path, results, final_only=False)
+
+
+def write_final_opinions_csv(path: Path, results: list[ExperimentResult]) -> None:
+    """Write only the last stored opinion snapshot from every simulation run."""
+
+    _write_snapshots_csv(path, results, final_only=True)
+
+
+def _write_snapshots_csv(
+    path: Path,
+    results: list[ExperimentResult],
+    *,
+    final_only: bool,
+) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "scenario",
-                "variant",
-                "normalizer",
-                "normalization_every",
-                "run_seed",
-                "graph_seed",
-                "opinion_seed",
-                "dynamics_seed",
-                "step",
-                "agent",
-                "opinion",
-            ],
-        )
+        writer = csv.DictWriter(handle, fieldnames=_SNAPSHOT_FIELDNAMES)
         writer.writeheader()
         for result in results:
             for simulation in result.simulations:
-                for snapshot in simulation.trajectory:
-                    if snapshot.opinions is None:
-                        continue
+                snapshots = [
+                    snapshot
+                    for snapshot in simulation.trajectory
+                    if snapshot.opinions is not None
+                ]
+                if final_only and snapshots:
+                    snapshots = [max(snapshots, key=lambda item: item.metrics.step)]
+                for snapshot in snapshots:
                     for agent, opinion in enumerate(snapshot.opinions):
                         writer.writerow(
                             {
@@ -158,6 +187,77 @@ def write_snapshots_csv(path: Path, results: list[ExperimentResult]) -> None:
                                 "opinion": opinion,
                             },
                         )
+
+
+def reduce_snapshots_csv(input_path: Path, output_path: Path) -> None:
+    """Create a compact CSV containing the final stored step of every run."""
+
+    if input_path.resolve() == output_path.resolve():
+        raise ValueError("input and output paths must be different")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with (
+            input_path.open(newline="", encoding="utf-8") as source,
+            tempfile.NamedTemporaryFile(
+                mode="w",
+                newline="",
+                encoding="utf-8",
+                dir=output_path.parent,
+                prefix=f".{output_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as destination,
+        ):
+            temporary_path = Path(destination.name)
+            reader = csv.DictReader(source)
+            fieldnames = reader.fieldnames or []
+            required = {*_SNAPSHOT_RUN_COLUMNS, "step", "opinion"}
+            missing = required - set(fieldnames)
+            if missing:
+                columns = ", ".join(sorted(missing))
+                raise ValueError(f"CSV file is missing required columns: {columns}")
+            writer = csv.DictWriter(destination, fieldnames=fieldnames)
+            writer.writeheader()
+            _write_final_snapshot_rows(reader, writer)
+        temporary_path.replace(output_path)
+    except Exception:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise
+
+
+def _write_final_snapshot_rows(
+    rows: csv.DictReader,
+    writer: csv.DictWriter,
+) -> None:
+    current_run: tuple[str, ...] | None = None
+    current_step: int | None = None
+    final_rows: list[dict[str, str]] = []
+    completed_runs: set[tuple[str, ...]] = set()
+
+    for row in rows:
+        run = tuple(row[column] for column in _SNAPSHOT_RUN_COLUMNS)
+        step = int(row["step"])
+        if current_run is None or run != current_run:
+            if current_run is not None:
+                writer.writerows(final_rows)
+                completed_runs.add(current_run)
+            if run in completed_runs:
+                raise ValueError("snapshot rows for each run must be contiguous")
+            current_run = run
+            current_step = step
+            final_rows = [row]
+        elif current_step is not None and step > current_step:
+            current_step = step
+            final_rows = [row]
+        elif step == current_step:
+            final_rows.append(row)
+        else:
+            raise ValueError("snapshot steps must be ordered within each run")
+
+    if final_rows:
+        writer.writerows(final_rows)
 
 
 def write_normalization_events_csv(path: Path, results: list[ExperimentResult]) -> None:

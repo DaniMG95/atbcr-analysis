@@ -55,8 +55,8 @@ Por ejemplo, los primeros escenarios del articulo se pueden lanzar como:
 - [config](src/atbcr_analysis/config): schemas de configuracion de escenarios,
   grafos, modelos, metricas, variantes y archivos YAML.
 - [persistence.py](src/atbcr_analysis/persistence.py): escritura de resultados.
-- [analysis.py](src/atbcr_analysis/analysis.py): comparacion de distribuciones finales.
-- [plots.py](src/atbcr_analysis/plots.py): graficos desde CSV persistidos.
+- [analysis.py](src/atbcr_analysis/analysis/analysis.py): comparacion de distribuciones finales.
+- [plots.py](src/atbcr_analysis/plots/plots.py): graficos desde CSV persistidos.
 
 Las clases de [config](src/atbcr_analysis/config) usan Pydantic para validar
 la configuracion en la frontera del sistema. El
@@ -322,6 +322,8 @@ Cada ejecucion escribe:
 - `trajectories.csv`: metricas temporales por replica, incluyendo frecuencias
   acumuladas, frecuencias por ventana, percentiles y seeds efectivas.
 - `snapshots.csv`: opiniones temporales por agente, con seeds efectivas.
+- `final_opinions.csv`: solo las opiniones del ultimo snapshot de cada replica;
+  es la entrada recomendada para histogramas y comparaciones de distribuciones.
 - `normalization_events.csv`: evento por normalizacion aplicada, con
   `max_abs_before`, `max_abs_after` y `scale` cuando aplica.
 - `interaction_events.csv`: eventos de interaccion si se activa
@@ -370,25 +372,85 @@ segundo. No contiene resultados hardcodeados.
 ## Plots
 
 El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
-`atbcr`. Tiene tres subcomandos:
+`atbcr`. Tiene ocho subcomandos:
 
 - `metric`: lee `trajectories.csv` y dibuja una metrica temporal por serie
   `scenario/variant/normalizer/normalization_every`. Por defecto usa
   `max_abs_opinion`, pero se puede cambiar con `--metric`.
+- `compare`: compara de forma generica metricas temporales procedentes de uno o
+  varios `trajectories.csv`. Permite filtrar configuraciones, transformar cada
+  replica antes de agregar, mostrar IC95% y ajustar rectas por replica.
 - `distribution`: lee `snapshots.csv`, selecciona el ultimo `step` de cada
   replica y dibuja histogramas de opiniones finales. Por defecto usa 50 bins,
   configurable con `--bins`.
+- `final-opinions`: reduce un `snapshots.csv` existente a un
+  `final_opinions.csv` con el ultimo `step` de cada replica. La salida se puede
+  cambiar con `--output`.
 - `opinions`: lee `snapshots.csv` y dibuja como cambian las opiniones de los
   agentes a lo largo del tiempo para una replica concreta. Se puede filtrar por
   `--scenario`, `--variant`, `--normalizer`, `--normalization-every` y
   `--run-seed`.
+- `extremized-heatmap`: lee `summary.csv` y representa
+  `extremized_share_mean` para cada combinacion de epsilon y theta. Acepta
+  columnas `epsilon` y `theta`, o nombres de escenario generados por la rejilla
+  (`e0p1_t0p5`). Se puede filtrar por `--variant`, `--normalizer` y
+  `--normalization-every`.
+- `parameter-distribution`: lee `final_opinions.csv` (o `snapshots.csv`) y
+  genera el histograma de opiniones finales. Acepta `--epsilon` y `--theta`, o
+  varios argumentos `--pair EPSILON THETA` para comparar las distribuciones en
+  subplots con bins y escalas compartidos. El rango de opinion se obtiene del
+  dominio de la variante; para dominios no acotados se usan los datos observados.
+- `extremized-trajectory`: lee `trajectories.csv` y representa la media entre
+  replicas de `extremized_share(t)`. Acepta `--epsilon` y `--theta` para una
+  curva, o varios argumentos `--pair EPSILON THETA` para comparar curvas con
+  leyenda en una misma figura.
 
-Ambos subcomandos requieren `--output` con la ruta del archivo de imagen. La
-extension elegida determina el formato que escribira Matplotlib, por ejemplo
-`.png`, `.pdf` o `.svg`.
+Todos los subcomandos que generan figuras requieren `--output` con la ruta del
+archivo de imagen. La extension elegida determina el formato que escribira
+Matplotlib, por ejemplo `.png`, `.pdf` o `.svg`.
 
 ```powershell
 atbcr-plot metric runs/reference/trajectories.csv --metric max_abs_opinion --output runs/reference/max_abs.png
+atbcr-plot compare --input runs/experiment_0.1/trajectories.csv runs/experiment_0.3/trajectories.csv --variants baseline_01 unbounded --metric max_abs_opinion --aggregate mean --ci --output runs/comparison/max_abs.pdf
+atbcr-plot compare --input runs/experiment_0.3/trajectories.csv --pair 0.2 0.7 --variants unbounded --normalizers none --metric max_abs_opinion --transform log --fit --fit-start 1000 --fit-end 10000 --output runs/comparison/log_growth.svg
 atbcr-plot distribution runs/reference/snapshots.csv --bins 50 --output runs/reference/final_distribution.png
+atbcr-plot final-opinions runs/reference/snapshots.csv
 atbcr-plot opinions runs/reference/snapshots.csv --scenario repulsivo --variant unbounded --normalizer max_abs --normalization-every 100 --run-seed 7 --output runs/reference/opinions.png
+atbcr-plot extremized-heatmap runs/grid/summary.csv --variant unbounded --normalizer none --output runs/grid/extremized.png
+atbcr-plot parameter-distribution runs/experiment_0.1/final_opinions.csv --epsilon 0.2 --theta 0.7 --variant baseline_01 --normalizer none --output runs/experiment_0.1/distribution_e0p2_t0p7.png
+atbcr-plot parameter-distribution runs/experiment_0.1/final_opinions.csv --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --variant baseline_01 --normalizer none --output runs/experiment_0.1/distributions_comparison.png
+atbcr-plot extremized-trajectory runs/experiment_0.3/trajectories.csv --epsilon 0.2 --theta 0.7 --variant unbounded --normalizer none --output runs/experiment_0.3/extremized_e0p2_t0p7.png
+atbcr-plot extremized-trajectory runs/experiment_0.3/trajectories.csv --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --variant unbounded --normalizer none --output runs/experiment_0.3/extremized_comparison.png
 ```
+
+### Comparaciones temporales genericas
+
+`compare` acepta uno o varios valores en `--input`, `--variants`, `--normalizers`
+y `--normalization-every`. `--pair EPSILON THETA` se puede repetir para elegir
+combinaciones concretas, por ejemplo `--pair 0.2 0.7 --pair 0.3 0.8`. Los
+filtros son opcionales: si no se proporciona `--pair`, se representan todos los
+pares disponibles. Los parametros se leen de las columnas `epsilon` y `theta`
+si existen, del `config.json` situado junto al CSV, o de nombres de rejilla como
+`e0p2_t0p7`. Para seleccionar la frecuencia vacia asociada al normalizador
+`none`, se puede usar `--normalization-every none`.
+
+Las transformaciones `log` (logaritmo natural) y `log10` se aplican a cada
+replica Monte Carlo antes de calcular `mean` o `median`. Un valor cero, negativo
+o no finito produce un error con archivo y fila; no se reemplaza por un valor
+artificial. Las bandas activadas con `--ci` usan las replicas como unidades
+independientes y la aproximacion normal
+`agregado +/- 1.96 * desviacion_muestral / sqrt(n)`. Con una sola replica no se
+dibuja una banda.
+
+Con `--fit`, el ajuste lineal se realiza por separado sobre cada replica y sobre
+la metrica ya transformada. `--fit-start` y `--fit-end` acotan el intervalo. La
+leyenda muestra la pendiente y el R2 medios, y se dibuja una recta descriptiva
+con los coeficientes medios. Ademas de la figura se crea, por defecto,
+`<nombre>_fits.csv`, con resultados por replica y una fila resumen por serie;
+`--fit-output` permite elegir otra ruta. El ajuste describe crecimiento en el
+intervalo observado y no constituye por si solo una demostracion de divergencia
+matematica.
+
+La extension de `--output` determina el formato. Para articulos y memorias se
+recomiendan formatos vectoriales (`.pdf` o `.svg`); los formatos raster se
+guardan a 300 dpi.

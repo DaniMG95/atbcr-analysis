@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,11 +12,10 @@ from unittest.mock import patch
 import yaml
 from pydantic import ValidationError
 
-from atbcr_analysis import analysis_cli
 from atbcr_analysis import cli
-from atbcr_analysis import plot_cli
+from atbcr_analysis.plots import plot_cli
 from atbcr_analysis import plots
-from atbcr_analysis.analysis import SeededFinalDistribution, paired_wasserstein_by_seed
+from atbcr_analysis.analysis import SeededFinalDistribution, paired_wasserstein_by_seed, analysis_cli
 from atbcr_analysis.config import (
     ATBCRModelConfig,
     BarabasiAlbertGraphConfig,
@@ -37,7 +38,7 @@ from atbcr_analysis.graphs import (
 from atbcr_analysis.metrics import cluster_count, extremized_share, percentile, summarize_values
 from atbcr_analysis.models import register_model
 from atbcr_analysis.normalizers import NormalizationConfig
-from atbcr_analysis.persistence import write_experiment_outputs
+from atbcr_analysis.persistence import reduce_snapshots_csv, write_experiment_outputs
 from atbcr_analysis.simulation import SimulationRunner, simulate_atbcr
 
 
@@ -437,6 +438,38 @@ class SimulationTests(unittest.TestCase):
 
         self.assertEqual(progress_calls, [(1, 3), (2, 3), (3, 3)])
 
+    def test_monte_carlo_reports_steps_within_each_run(self) -> None:
+        config = SimulationConfig(
+            name="step-progress",
+            model=ATBCRModelConfig(epsilon=0.4, theta=0.9, mu=0.2),
+            graph=RingGraphConfig(n_agents=10),
+            steps=3,
+            metrics=MetricsConfig(record_every=3, store_opinion_snapshots=False),
+        )
+        progress_calls: list[tuple[int, int, int, int]] = []
+
+        run_monte_carlo(
+            config,
+            MonteCarloConfig(runs=2, seed=10),
+            step_progress_callback=lambda run, runs, step, steps: progress_calls.append(
+                (run, runs, step, steps),
+            ),
+        )
+
+        self.assertEqual(
+            progress_calls,
+            [
+                (1, 2, 0, 3),
+                (1, 2, 1, 3),
+                (1, 2, 2, 3),
+                (1, 2, 3, 3),
+                (2, 2, 0, 3),
+                (2, 2, 1, 3),
+                (2, 2, 2, 3),
+                (2, 2, 3, 3),
+            ],
+        )
+
     def test_paired_wasserstein_requires_matching_seed_sets_and_summarizes(self) -> None:
         result = paired_wasserstein_by_seed(
             {1: [0.0, 1.0], 2: [0.0, 2.0]},
@@ -563,7 +596,7 @@ class SimulationTests(unittest.TestCase):
             variant="unbounded",
             domain="unbounded",
             steps=2,
-            metrics=MetricsConfig(record_every=1, store_opinion_snapshots=False),
+            metrics=MetricsConfig(record_every=1, store_opinion_snapshots=True),
             opinion_initializer=UniformOpinionInitializerConfig(low=-2.0, high=2.0),
             normalization=NormalizationConfig(kind="max_abs", every=1),
         )
@@ -581,6 +614,11 @@ class SimulationTests(unittest.TestCase):
             encoding="utf-8",
         ) as handle:
             event_rows = list(csv.DictReader(handle))
+        with (output_dir / "final_opinions.csv").open(
+            newline="",
+            encoding="utf-8",
+        ) as handle:
+            final_opinions = list(csv.DictReader(handle))
         self.assertIn("confidence_frequency_window", trajectory_header)
         self.assertIn("p95_abs_opinion", trajectory_header)
         self.assertIn("graph_seed", trajectory_header)
@@ -590,9 +628,78 @@ class SimulationTests(unittest.TestCase):
         self.assertIn("nan", (output_dir / "summary.csv").read_text(encoding="utf-8"))
         self.assertEqual(len(event_rows), 2)
         self.assertEqual(event_rows[0]["normalizer"], "max_abs")
+        self.assertEqual(len(final_opinions), 8)
+        self.assertEqual({row["step"] for row in final_opinions}, {"2"})
+
+    def test_reduce_snapshots_csv_keeps_only_last_step_per_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "snapshots.csv"
+            output = root / "final_opinions.csv"
+            fieldnames = [
+                "scenario",
+                "variant",
+                "normalizer",
+                "normalization_every",
+                "run_seed",
+                "step",
+                "agent",
+                "opinion",
+            ]
+            with source.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer.writeheader()
+                for run_seed in (1, 2):
+                    for step in (0, 10):
+                        for agent in (0, 1):
+                            writer.writerow(
+                                {
+                                    "scenario": "e0p2_t0p7",
+                                    "variant": "baseline_01",
+                                    "normalizer": "none",
+                                    "normalization_every": "",
+                                    "run_seed": run_seed,
+                                    "step": step,
+                                    "agent": agent,
+                                    "opinion": run_seed + step + agent / 10,
+                                },
+                            )
+
+            reduce_snapshots_csv(source, output)
+
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(len(rows), 4)
+        self.assertEqual({row["step"] for row in rows}, {"10"})
+        self.assertEqual({row["run_seed"] for row in rows}, {"1", "2"})
 
 
 class SimulationCliConfigTests(unittest.TestCase):
+    def test_progress_bar_shows_estimated_time_remaining(self) -> None:
+        stderr = io.StringIO()
+        with (
+            patch(
+                "atbcr_analysis.cli.time.monotonic",
+                side_effect=[100.0, 110.0, 120.0, 100.0, 130.0],
+            ),
+            patch("atbcr_analysis.cli.sys.stderr", stderr),
+        ):
+            progress = cli._ProgressBar("scenario")
+            progress(1, 3)
+            progress(3, 3)
+            progress.update_steps(1, 2, 0, 100)
+            progress.update_steps(1, 2, 50, 100)
+            progress.finish()
+
+        output = stderr.getvalue()
+        self.assertIn("quedan 2 | ETA 00:00:20", output)
+        self.assertIn("quedan 0 | ETA 00:00:00", output)
+        self.assertIn("replica 1/2 | paso 0/100", output)
+        self.assertIn("ETA calculando...", output)
+        self.assertIn("paso 50/100 | total  25.0%", output)
+        self.assertIn("transcurrido 00:00:30 | ETA 00:01:30", output)
+
     def test_yaml_config_runs_single_schema_experiment(self) -> None:
         config_path = Path("runs/test-cli-config.yaml")
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -762,6 +869,307 @@ class SimulationCliConfigTests(unittest.TestCase):
 
 
 class PlotCliTests(unittest.TestCase):
+    def test_final_opinions_are_selected_for_multiple_parameter_pairs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshots_path = Path(temporary_directory) / "snapshots.csv"
+            with snapshots_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "scenario",
+                        "variant",
+                        "normalizer",
+                        "normalization_every",
+                        "run_seed",
+                        "step",
+                        "agent",
+                        "opinion",
+                    ],
+                )
+                writer.writeheader()
+                for run_seed, final_opinion in ((1, 0.8), (2, -0.6)):
+                    writer.writerow(
+                        {
+                            "scenario": "e0p2_t0p7",
+                            "variant": "unbounded",
+                            "normalizer": "none",
+                            "normalization_every": "",
+                            "run_seed": run_seed,
+                            "step": 0,
+                            "agent": 0,
+                            "opinion": 0.0,
+                        },
+                    )
+                    writer.writerow(
+                        {
+                            "scenario": "e0p2_t0p7",
+                            "variant": "unbounded",
+                            "normalizer": "none",
+                            "normalization_every": "",
+                            "run_seed": run_seed,
+                            "step": 10,
+                            "agent": 0,
+                            "opinion": final_opinion,
+                        },
+                    )
+                for run_seed, final_opinion in ((1, 0.4), (2, -0.2)):
+                    writer.writerow(
+                        {
+                            "scenario": "e0p3_t0p8",
+                            "variant": "unbounded",
+                            "normalizer": "none",
+                            "normalization_every": "",
+                            "run_seed": run_seed,
+                            "step": 10,
+                            "agent": 0,
+                            "opinion": final_opinion,
+                        },
+                    )
+
+            opinions = plots._final_opinions_for_parameter_pairs(
+                snapshots_path,
+                parameter_pairs=[(0.2, 0.7), (0.3, 0.8)],
+                variant="unbounded",
+                normalizer="none",
+            )
+
+        self.assertEqual(opinions[(0.2, 0.7)], [0.8, -0.6])
+        self.assertEqual(opinions[(0.3, 0.8)], [0.4, -0.2])
+
+    def test_parameter_distribution_uses_comparable_subplots(self) -> None:
+        import matplotlib.pyplot as plt
+
+        pairs = [(0.2, 0.7), (0.3, 0.8), (0.4, 0.9)]
+        opinions = {
+            (0.2, 0.7): [0.1, 0.2, 0.3],
+            (0.3, 0.8): [0.4, 0.5, 0.6],
+            (0.4, 0.9): [0.7, 0.8, 0.9],
+        }
+        with (
+            patch(
+                "atbcr_analysis.plots.plots._final_opinions_for_parameter_pairs",
+                return_value=opinions,
+            ),
+            patch("matplotlib.pyplot.close") as close_plot,
+        ):
+            plots.plot_final_opinion_histogram(
+                Path("snapshots.csv"),
+                Path("distribution.png"),
+                parameter_pairs=pairs,
+                variant="bounded_01",
+                bins=5,
+            )
+
+        figure = close_plot.call_args.args[0]
+        try:
+            self.assertEqual(len(figure.axes), 3)
+            self.assertTrue(all(axis.get_xlim() == (0.0, 1.0) for axis in figure.axes))
+            self.assertEqual(len({axis.get_ylim() for axis in figure.axes}), 1)
+            self.assertTrue(all(len(axis.patches) == 5 for axis in figure.axes))
+            self.assertEqual(
+                [axis.get_title() for axis in figure.axes],
+                [
+                    r"$\epsilon=0.2,\ \theta=0.7$",
+                    r"$\epsilon=0.3,\ \theta=0.8$",
+                    r"$\epsilon=0.4,\ \theta=0.9$",
+                ],
+            )
+        finally:
+            plt.close(figure)
+
+    def test_parameter_distribution_range_follows_variant_domain(self) -> None:
+        from atbcr_analysis.plots import plots as plots_module
+
+        with patch(
+            "atbcr_analysis.plots.plots._read_run_metadata",
+            return_value={
+                "variants": [
+                    {"name": "baseline_01", "domain": "bounded_01"},
+                    {"name": "baseline_m11", "domain": "bounded_m11"},
+                    {"name": "unbounded_model", "domain": "unbounded"},
+                ],
+            },
+        ):
+            bounded_01 = plots_module._opinion_axis_limits(
+                Path("snapshots.csv"),
+                "baseline_01",
+                [-4.0, 4.0],
+            )
+            bounded_m11 = plots_module._opinion_axis_limits(
+                Path("snapshots.csv"),
+                "baseline_m11",
+                [-4.0, 4.0],
+            )
+            unbounded = plots_module._opinion_axis_limits(
+                Path("snapshots.csv"),
+                "unbounded_model",
+                [-4.0, 6.0],
+            )
+
+        self.assertEqual(bounded_01, (0.0, 1.0))
+        self.assertEqual(bounded_m11, (-1.0, 1.0))
+        self.assertEqual(unbounded, (-4.0, 6.0))
+
+    def test_extremized_share_trajectories_average_runs_for_multiple_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trajectories_path = Path(temporary_directory) / "trajectories.csv"
+            with trajectories_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "scenario",
+                        "variant",
+                        "normalizer",
+                        "normalization_every",
+                        "run_seed",
+                        "step",
+                        "extremized_share",
+                    ],
+                )
+                writer.writeheader()
+                for run_seed, shares in ((1, (0.1, 0.5)), (2, (0.3, 0.9))):
+                    for step, share in zip((0, 10), shares, strict=True):
+                        writer.writerow(
+                            {
+                                "scenario": "e0p2_t0p7",
+                                "variant": "unbounded",
+                                "normalizer": "none",
+                                "normalization_every": "",
+                                "run_seed": run_seed,
+                                "step": step,
+                                "extremized_share": share,
+                            },
+                        )
+                for run_seed, shares in ((1, (0.2, 0.4)), (2, (0.4, 0.8))):
+                    for step, share in zip((0, 10), shares, strict=True):
+                        writer.writerow(
+                            {
+                                "scenario": "e0p3_t0p8",
+                                "variant": "unbounded",
+                                "normalizer": "none",
+                                "normalization_every": "",
+                                "run_seed": run_seed,
+                                "step": step,
+                                "extremized_share": share,
+                            },
+                        )
+
+            trajectories = plots._mean_extremized_shares_for_parameters(
+                trajectories_path,
+                parameter_pairs=[(0.2, 0.7), (0.3, 0.8)],
+                variant="unbounded",
+                normalizer="none",
+            )
+
+        self.assertEqual(trajectories[(0.2, 0.7)], {0: 0.2, 10: 0.7})
+        self.assertAlmostEqual(trajectories[(0.3, 0.8)][0], 0.3)
+        self.assertAlmostEqual(trajectories[(0.3, 0.8)][10], 0.6)
+
+    def test_extremized_share_heatmap_reads_explicit_parameters_and_writes_plot(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            summary_path = Path(temporary_directory) / "summary.csv"
+            output_path = Path(temporary_directory) / "extremized.png"
+            with summary_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "scenario",
+                        "variant",
+                        "normalizer",
+                        "normalization_every",
+                        "epsilon",
+                        "theta",
+                        "extremized_share_mean",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {
+                            "scenario": "first",
+                            "variant": "unbounded",
+                            "normalizer": "none",
+                            "normalization_every": "",
+                            "epsilon": "0.2",
+                            "theta": "0.8",
+                            "extremized_share_mean": "0.25",
+                        },
+                        {
+                            "scenario": "second",
+                            "variant": "unbounded",
+                            "normalizer": "none",
+                            "normalization_every": "",
+                            "epsilon": "0.1",
+                            "theta": "0.6",
+                            "extremized_share_mean": "0.5",
+                        },
+                    ],
+                )
+
+            grid = plots._read_extremized_share_grid(
+                summary_path,
+                variant="unbounded",
+            )
+            plots.plot_extremized_share_heatmap(
+                summary_path,
+                output_path,
+                variant="unbounded",
+            )
+
+            self.assertEqual(grid.epsilons, [0.1, 0.2])
+            self.assertEqual(grid.thetas, [0.6, 0.8])
+            self.assertEqual(grid.values[0][0], 0.5)
+            self.assertEqual(grid.values[1][1], 0.25)
+            self.assertNotEqual(grid.values[0][1], grid.values[0][1])
+            self.assertGreater(output_path.stat().st_size, 0)
+
+    def test_extremized_share_grid_reads_parameters_from_grid_scenario_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            summary_path = Path(temporary_directory) / "summary.csv"
+            summary_path.write_text(
+                "scenario,extremized_share_mean\n"
+                "e0p05_t0p2,0.125\n",
+                encoding="utf-8",
+            )
+
+            grid = plots._read_extremized_share_grid(summary_path)
+
+        self.assertEqual(grid.epsilons, [0.05])
+        self.assertEqual(grid.thetas, [0.2])
+        self.assertEqual(grid.values, [[0.125]])
+
+    def test_extremized_heatmap_command_delegates_to_plotter(self) -> None:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_extremized_share_heatmap",
+        ) as plot_heatmap:
+            exit_code = plot_cli.main(
+                [
+                    "extremized-heatmap",
+                    "runs/grid/summary.csv",
+                    "--variant",
+                    "unbounded",
+                    "--normalizer",
+                    "max_abs",
+                    "--normalization-every",
+                    "100",
+                    "--output",
+                    "runs/grid/extremized.png",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        plot_heatmap.assert_called_once_with(
+            Path("runs/grid/summary.csv"),
+            Path("runs/grid/extremized.png"),
+            variant="unbounded",
+            normalizer="max_abs",
+            normalization_every="100",
+        )
+
     def test_opinion_plot_title_uses_effective_model_parameters_and_range(self) -> None:
         config_path = Path("runs/title-test/config.json")
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -796,7 +1204,9 @@ class PlotCliTests(unittest.TestCase):
         )
 
     def test_metric_command_delegates_to_metric_plotter(self) -> None:
-        with patch("atbcr_analysis.plot_cli.plot_metric_trajectories") as plot_metric:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_metric_trajectories",
+        ) as plot_metric:
             exit_code = plot_cli.main(
                 [
                     "metric",
@@ -816,7 +1226,9 @@ class PlotCliTests(unittest.TestCase):
         )
 
     def test_metric_command_uses_default_metric(self) -> None:
-        with patch("atbcr_analysis.plot_cli.plot_metric_trajectories") as plot_metric:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_metric_trajectories",
+        ) as plot_metric:
             exit_code = plot_cli.main(
                 [
                     "metric",
@@ -834,7 +1246,9 @@ class PlotCliTests(unittest.TestCase):
         )
 
     def test_distribution_command_delegates_to_distribution_plotter(self) -> None:
-        with patch("atbcr_analysis.plot_cli.plot_final_distribution") as plot_distribution:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_final_distribution",
+        ) as plot_distribution:
             exit_code = plot_cli.main(
                 [
                     "distribution",
@@ -854,7 +1268,9 @@ class PlotCliTests(unittest.TestCase):
         )
 
     def test_distribution_command_uses_default_bins(self) -> None:
-        with patch("atbcr_analysis.plot_cli.plot_final_distribution") as plot_distribution:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_final_distribution",
+        ) as plot_distribution:
             exit_code = plot_cli.main(
                 [
                     "distribution",
@@ -871,8 +1287,27 @@ class PlotCliTests(unittest.TestCase):
             bins=50,
         )
 
+    def test_final_opinions_command_uses_default_output(self) -> None:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.reduce_snapshots_csv",
+        ) as reduce_snapshots:
+            exit_code = plot_cli.main(
+                [
+                    "final-opinions",
+                    "runs/reference/snapshots.csv",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        reduce_snapshots.assert_called_once_with(
+            Path("runs/reference/snapshots.csv"),
+            Path("runs/reference/final_opinions.csv"),
+        )
+
     def test_opinions_command_delegates_to_opinion_plotter(self) -> None:
-        with patch("atbcr_analysis.plot_cli.plot_opinion_trajectories") as plot_opinions:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_opinion_trajectories",
+        ) as plot_opinions:
             exit_code = plot_cli.main(
                 [
                     "opinions",

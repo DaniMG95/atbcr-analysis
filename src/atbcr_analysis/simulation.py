@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from typing import Callable
 
 from atbcr_analysis.config import SimulationConfig
 from atbcr_analysis.graphs import EdgeSequence, complete_graph_edges, graph_edges, generate_graph
@@ -75,6 +76,7 @@ class SimulationRunner:
         graph_seed: int | None = None,
         opinion_seed: int | None = None,
         dynamics_seed: int | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> SimulationResult:
         """Run a configured simulation."""
 
@@ -113,6 +115,9 @@ class SimulationRunner:
             window_size=self.config.metrics.record_every,
             config=self.config,
         )
+        progress_every = max(1, self.config.steps // 100)
+        if progress_callback is not None:
+            progress_callback(0, self.config.steps)
 
         for step in range(1, self.config.steps + 1):
             if self.config.metrics.store_interaction_events:
@@ -152,6 +157,10 @@ class SimulationRunner:
                     repulsion=counts.repulsion,
                 )
                 last_snapshot_step = step
+            if progress_callback is not None and (
+                step % progress_every == 0 or step == self.config.steps
+            ):
+                progress_callback(step, self.config.steps)
 
         final_metrics = trajectory[-1].metrics
         return SimulationResult(

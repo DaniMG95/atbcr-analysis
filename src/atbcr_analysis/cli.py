@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -49,26 +50,44 @@ def _run_experiment(config: RunConfig) -> None:
     )
 
     results: list[ExperimentResult] = []
-    for scenario in scenarios:
+    if config.show_progress:
+        _print_status(
+            f"Experimento iniciado: {len(scenarios)} escenarios, "
+            f"{len(variants)} variantes y {len(normalizations)} normalizaciones.",
+        )
+    for scenario_number, scenario in enumerate(scenarios, start=1):
         for variant in variants:
             variant_base = base_simulation.with_variant(variant, scenario)
             for normalization in normalizations:
                 simulation = _apply_normalization(variant_base, normalization)
                 progress = None
                 if config.show_progress:
+                    _print_status(
+                        f"Escenario {scenario_number}/{len(scenarios)}: "
+                        f"preparando {_progress_label(simulation)}...",
+                    )
                     progress = _ProgressBar(_progress_label(simulation))
+                    progress.start(config.monte_carlo.runs, simulation.steps)
                 try:
                     results.append(
                         run_monte_carlo(
                             simulation,
                             config.monte_carlo,
-                            progress_callback=progress,
+                            step_progress_callback=(
+                                None if progress is None else progress.update_steps
+                            ),
                         ),
                     )
                 finally:
                     if progress is not None:
                         progress.finish()
+                if config.show_progress:
+                    _print_status(
+                        f"Escenario {scenario_number}/{len(scenarios)} completado.",
+                    )
 
+    if config.show_progress:
+        _print_status(f"Guardando resultados en {output_dir}...")
     write_experiment_outputs(
         output_dir,
         results,
@@ -79,6 +98,8 @@ def _run_experiment(config: RunConfig) -> None:
             "normalizations": list(normalizations),
         },
     )
+    if config.show_progress:
+        _print_status("Resultados guardados. Experimento completado.")
     _print_summary(results)
 
 
@@ -108,6 +129,10 @@ class _ProgressBar:
         self.width = width
         self.completed = 0
         self.total = 0
+        self.started_at = time.monotonic()
+
+    def start(self, total_runs: int, total_steps: int) -> None:
+        self.update_steps(1, total_runs, 0, total_steps)
 
     def __call__(self, completed: int, total: int) -> None:
         self.completed = completed
@@ -116,18 +141,63 @@ class _ProgressBar:
         filled = min(self.width, int(self.width * ratio))
         bar = "#" * filled + "-" * (self.width - filled)
         remaining = max(total - completed, 0)
+        elapsed = time.monotonic() - self.started_at
+        remaining_seconds = elapsed / completed * remaining if completed else 0.0
         percent = int(ratio * 100)
         sys.stderr.write(
             f"\r{self.label} [{bar}] {completed}/{total} "
-            f"({percent:3d}%) quedan {remaining}",
+            f"({percent:3d}%) quedan {remaining} | ETA {_format_duration(remaining_seconds)}",
         )
         sys.stderr.flush()
+
+    def update_steps(
+        self,
+        run_number: int,
+        total_runs: int,
+        step: int,
+        total_steps: int,
+    ) -> None:
+        completed_steps = (run_number - 1) * total_steps + step
+        all_steps = total_runs * total_steps
+        ratio = completed_steps / all_steps if all_steps else 1.0
+        filled = min(self.width, int(self.width * ratio))
+        bar = "#" * filled + "-" * (self.width - filled)
+        elapsed = time.monotonic() - self.started_at
+        eta = _estimate_remaining(elapsed, completed_steps, all_steps)
+        percent = ratio * 100
+        sys.stderr.write(
+            f"\r{self.label} [{bar}] replica {run_number}/{total_runs} | "
+            f"paso {step}/{total_steps} | total {percent:5.1f}% | "
+            f"transcurrido {_format_duration(elapsed)} | ETA {eta}",
+        )
+        sys.stderr.flush()
+        self.completed = completed_steps
+        self.total = all_steps
 
     def finish(self) -> None:
         if self.total == 0:
             return
         sys.stderr.write("\n")
         sys.stderr.flush()
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, round(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _estimate_remaining(elapsed: float, completed: int, total: int) -> str:
+    if completed <= 0:
+        return "calculando..."
+    remaining_seconds = elapsed / completed * max(total - completed, 0)
+    return _format_duration(remaining_seconds)
+
+
+def _print_status(message: str) -> None:
+    sys.stderr.write(f"{message}\n")
+    sys.stderr.flush()
 
 
 def _progress_label(simulation: SimulationConfig) -> str:

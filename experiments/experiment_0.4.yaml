@@ -1,0 +1,68 @@
+experiments:
+  - scenarios:
+      e0p2_t0p7:
+        epsilon: 0.2
+        theta: 0.7
+        mu: 0.1
+      e0p2_t0p8:
+        epsilon: 0.2
+        theta: 0.8
+        mu: 0.1
+      e0p2_t0p9:
+        epsilon: 0.2
+        theta: 0.9
+        mu: 0.1
+      e0p3_t0p7:
+        epsilon: 0.3
+        theta: 0.7
+        mu: 0.1
+      e0p3_t0p8:
+        epsilon: 0.3
+        theta: 0.8
+        mu: 0.1
+      e0p3_t0p9:
+        epsilon: 0.3
+        theta: 0.9
+        mu: 0.1
+      e0p4_t0p7:
+        epsilon: 0.4
+        theta: 0.7
+        mu: 0.1
+      e0p4_t0p8:
+        epsilon: 0.4
+        theta: 0.8
+        mu: 0.1
+      e0p4_t0p9:
+        epsilon: 0.4
+        theta: 0.9
+        mu: 0.1
+    variants:
+      - name: unbounded
+        domain: unbounded
+        threshold_scale: 2.0
+        initializer:
+          kind: uniform
+          low: -1.0
+          high: 1.0
+    graph:
+      kind: complete
+      n_agents: 1000
+    steps: 100000
+    normalizations:
+      - kind: max_abs
+        every: 10
+      - kind: max_abs
+        every: 100
+      - kind: max_abs
+        every: 1000
+      - kind: max_abs
+        every: 10000
+    metrics:
+      record_every: 1000
+      store_opinion_snapshots: true
+      unbounded_extreme_cutoff: 1.0
+    monte_carlo:
+      runs: 100
+      workers: 6
+      seed: 7
+    output_dir: runs/experiment_0.4

@@ -20,7 +20,7 @@ dependencies = [
 [project.scripts]
 atbcr = "atbcr_analysis.cli:main"
 atbcr-compare = "atbcr_analysis.analysis_cli:main"
-atbcr-plot = "atbcr_analysis.plot_cli:main"
+atbcr-plot = "atbcr_analysis.plots.plot_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
