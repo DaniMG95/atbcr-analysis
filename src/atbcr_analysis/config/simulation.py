@@ -10,7 +10,11 @@ from atbcr_analysis.config.initializers import (
     UniformOpinionInitializerConfig,
 )
 from atbcr_analysis.config.metrics import MetricsConfig
-from atbcr_analysis.config.models import ModelConfigType, scale_model_thresholds
+from atbcr_analysis.config.models import (
+    ATBCRModelConfig,
+    ModelConfigType,
+    scale_model_thresholds,
+)
 from atbcr_analysis.config.scenarios import ScenarioConfig
 from atbcr_analysis.config.variants import VariantConfig
 from atbcr_analysis.normalizers import NormalizationConfig
@@ -39,10 +43,16 @@ class SimulationConfig(BaseModel):
     def with_variant(self, variant: VariantConfig, scenario: ScenarioConfig) -> SimulationConfig:
         """Return a copy with variant settings applied."""
 
+        model = scale_model_thresholds(scenario.model, variant.threshold_scale)
+        if isinstance(model, ATBCRModelConfig):
+            model = model.with_threshold_policy(
+                variant.threshold_mode,
+                variant.threshold_update_every,
+            )
         return self.model_copy(
             update={
                 "name": scenario.name,
-                "model": scale_model_thresholds(scenario.model, variant.threshold_scale),
+                "model": model,
                 "variant": variant.name,
                 "domain": variant.domain,
                 "opinion_initializer": variant.initializer,

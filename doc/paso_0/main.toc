@@ -1,0 +1,50 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {section}{\numberline {1}Configuracion comun}{3}{section.1}%
+\contentsline {section}{\numberline {2}Validación del modelo ATBCR original}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Configuración experimental}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Métricas analizadas}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Resultados}{4}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}Efecto del umbral de repulsión}{4}{subsubsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.4}Interacción entre confianza y repulsión}{4}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.5}Casos de la diagonal principal}{5}{subsection.2.5}%
+\contentsline {subsection}{\numberline {2.6}Evidencia gráfica de los regímenes finales}{5}{subsection.2.6}%
+\contentsline {subsection}{\numberline {2.7}Representación gráfica de la evolución de la extremización}{6}{subsection.2.7}%
+\contentsline {subsection}{\numberline {2.8}Evolución temporal}{6}{subsection.2.8}%
+\contentsline {subsection}{\numberline {2.9}Conclusiones del experimento}{6}{subsection.2.9}%
+\contentsline {section}{\numberline {3}Equivalencia del ATBCR entre los dominios [0,1] y [-1,1]}{8}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Configuración experimental}{8}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Resultados}{8}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Equivalencia de trayectorias individuales}{9}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Conclusiones}{9}{subsection.3.4}%
+\contentsline {section}{\numberline {4}ATBCR sin acotación de las opiniones}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Configuración experimental}{9}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Crecimiento de las opiniones y dispersión}{9}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Influencia de los umbrales en el crecimiento}{10}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Conclusiones}{10}{subsection.4.4}%
+\contentsline {section}{\numberline {5}Normalización periódica mediante \texttt {max\_abs}}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Objetivo y configuración}{11}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Evolución de las frecuencias de interacción}{12}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Resultados finales}{12}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Comparación de las distribuciones finales}{13}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Estabilidad temporal de las opiniones}{13}{subsection.5.5}%
+\contentsline {subsection}{\numberline {5.6}Conclusiones del experimento}{13}{subsection.5.6}%
+\contentsline {section}{\numberline {6}Normalización logarítmica con signo}{14}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Objetivo}{14}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Formulación de la normalización}{14}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Configuración experimental}{15}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Evolución de las frecuencias de interacción}{15}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Distribuciones finales de opinión}{16}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Análisis de ejecuciones individuales}{17}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Comparación con la normalización max\_abs}{17}{subsection.6.7}%
+\contentsline {subsection}{\numberline {6.8}Conclusiones del Experimento}{18}{subsection.6.8}%
+\contentsline {section}{\numberline {7}Conclusiones generales}{18}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Equivalencia entre dominios}{18}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Consecuencias de eliminar el dominio}{18}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Efecto de la normalización lineal}{18}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Efecto de la normalización logarítmica}{19}{subsection.7.4}%
+\contentsline {subsection}{\numberline {7.5}Conclusión final}{19}{subsection.7.5}%
+\contentsline {subsection}{\numberline {7.6}Resolución de dudas: persistencia de opiniones centrales}{19}{subsection.7.6}%
+\contentsline {subsection}{\numberline {7.7}Persistencia de opiniones centrales}{19}{subsection.7.7}%
+\contentsline {subsection}{\numberline {7.8}Visualizacion de graficas de opiniones}{21}{subsection.7.8}%
+\contentsline {subsection}{\numberline {7.9}Representaciones temporales de max\_abs}{21}{subsection.7.9}%
+\contentsline {subsection}{\numberline {7.10}Representaciones temporales de signed\_log\_max\_abs}{26}{subsection.7.10}%

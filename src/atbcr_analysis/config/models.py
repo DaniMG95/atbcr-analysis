@@ -21,9 +21,11 @@ class ATBCRModelConfig(ModelConfig):
     model_config = ConfigDict(frozen=True)
 
     name: Literal["atbcr"] = "atbcr"
-    epsilon: float = Field(default=0.3, ge=0)
-    theta: float = Field(default=0.8, ge=0)
-    mu: float = Field(default=0.25, gt=0, le=0.5)
+    epsilon: float = Field(default=0.3, ge=0, allow_inf_nan=False)
+    theta: float = Field(default=0.8, ge=0, allow_inf_nan=False)
+    mu: float = Field(default=0.25, gt=0, le=0.5, allow_inf_nan=False)
+    threshold_mode: Literal["fixed", "max_abs"] = "fixed"
+    threshold_update_every: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> ATBCRModelConfig:
@@ -38,6 +40,22 @@ class ATBCRModelConfig(ModelConfig):
             epsilon=self.epsilon * factor,
             theta=self.theta * factor,
             mu=self.mu,
+            threshold_mode=self.threshold_mode,
+            threshold_update_every=self.threshold_update_every,
+        )
+
+    def with_threshold_policy(
+        self,
+        mode: Literal["fixed", "max_abs"],
+        update_every: int,
+    ) -> ATBCRModelConfig:
+        """Return the same ATBCR parameters with a threshold update policy."""
+
+        return self.model_copy(
+            update={
+                "threshold_mode": mode,
+                "threshold_update_every": update_every,
+            },
         )
 
 

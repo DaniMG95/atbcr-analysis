@@ -192,6 +192,7 @@ def plot_final_opinion_histogram(
     variant: str | None = None,
     normalizer: str | None = None,
     normalization_every: str | None = None,
+    run_seed: str | None = None,
     bins: int = 50,
 ) -> None:
     """Plot final opinions for one or more epsilon/theta parameter pairs."""
@@ -211,6 +212,7 @@ def plot_final_opinion_histogram(
         variant=variant,
         normalizer=normalizer,
         normalization_every=normalization_every,
+        run_seed=run_seed,
     )
     all_opinions = [
         opinion for opinions in opinions_by_pair.values() for opinion in opinions
@@ -344,6 +346,7 @@ def _final_opinions_for_parameters(
     variant: str | None = None,
     normalizer: str | None = None,
     normalization_every: str | None = None,
+    run_seed: str | None = None,
 ) -> list[float]:
     return _final_opinions_for_parameter_pairs(
         snapshots_csv,
@@ -351,6 +354,7 @@ def _final_opinions_for_parameters(
         variant=variant,
         normalizer=normalizer,
         normalization_every=normalization_every,
+        run_seed=run_seed,
     )[(epsilon, theta)]
 
 
@@ -361,6 +365,7 @@ def _final_opinions_for_parameter_pairs(
     variant: str | None = None,
     normalizer: str | None = None,
     normalization_every: str | None = None,
+    run_seed: str | None = None,
 ) -> dict[tuple[float, float], list[float]]:
     pairs = _resolve_parameter_pairs(parameter_pairs=parameter_pairs)
     final_by_pair_and_run: dict[
@@ -380,17 +385,18 @@ def _final_opinions_for_parameter_pairs(
                 variant=variant,
                 normalizer=normalizer,
                 normalization_every=normalization_every,
+                run_seed=run_seed,
             )
             if pair is None:
                 continue
             matched_series[pair].add(_series_key(row))
-            run_seed = row["run_seed"]
+            row_run_seed = row["run_seed"]
             step = int(row["step"])
             opinion = float(row["opinion"])
             final_by_run = final_by_pair_and_run[pair]
-            current = final_by_run.get(run_seed)
+            current = final_by_run.get(row_run_seed)
             if current is None or step > current[0]:
-                final_by_run[run_seed] = (step, [opinion])
+                final_by_run[row_run_seed] = (step, [opinion])
             elif step == current[0]:
                 current[1].append(opinion)
 
@@ -453,6 +459,7 @@ def _mean_extremized_shares_for_parameters(
                 variant=variant,
                 normalizer=normalizer,
                 normalization_every=normalization_every,
+                run_seed=None,
             )
             if pair is None:
                 continue
@@ -502,11 +509,13 @@ def _matching_parameter_pair(
     variant: str | None,
     normalizer: str | None,
     normalization_every: str | None,
+    run_seed: str | None,
 ) -> tuple[float, float] | None:
     filters = {
         "variant": variant,
         "normalizer": normalizer,
         "normalization_every": normalization_every,
+        "run_seed": run_seed,
     }
     if not all(
         expected is None or row.get(column) == expected
@@ -653,34 +662,47 @@ def plot_opinion_trajectories(
     normalization_every: str | None = None,
     run_seed: str | None = None,
     max_agents: int | None = None,
+    yscale: str = "linear",
+    symlog_linthresh: float = 1.0,
 ) -> None:
     """Plot individual opinion trajectories for one persisted simulation run."""
 
     import matplotlib.pyplot as plt
 
-    rows = _read_snapshot_rows(snapshots_csv)
-    selected = _select_snapshot_series(
-        rows,
+    if yscale not in {"linear", "symlog"}:
+        raise ValueError("yscale must be 'linear' or 'symlog'")
+    if yscale == "symlog" and symlog_linthresh <= 0:
+        raise ValueError("symlog_linthresh must be positive")
+
+    selected, trajectories = _read_opinion_trajectories(
+        snapshots_csv,
         scenario=scenario,
         variant=variant,
         normalizer=normalizer,
         normalization_every=normalization_every,
         run_seed=run_seed,
+        max_agents=max_agents,
     )
-    trajectories = _build_agent_trajectories(rows, selected, max_agents=max_agents)
     if not trajectories:
         raise ValueError("No snapshot opinions matched the selected series")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for points in trajectories.values():
-        ordered = sorted(points)
-        ax.scatter(
-            [step for step, _ in ordered],
-            [opinion for _, opinion in ordered],
-            color="blue",
-            alpha=0.08,
-            s=4,
-        )
+    fig, (ax, distribution_ax) = plt.subplots(
+        1,
+        2,
+        figsize=(11, 6),
+        sharey=True,
+        layout="constrained",
+        gridspec_kw={"width_ratios": (5, 1), "wspace": 0.05},
+    )
+    updated = [point for points in trajectories.values() for point in sorted(points)]
+    ax.scatter(
+        [step for step, _ in updated],
+        [opinion for _, opinion in updated],
+        color="blue",
+        alpha=0.08,
+        s=4,
+        label="updated opinions",
+    )
 
     initial = [points[0] for points in trajectories.values() if points]
     final = [points[-1] for points in trajectories.values() if points]
@@ -705,20 +727,53 @@ def plot_opinion_trajectories(
     ax.set_title(title)
     ax.set_xlabel("time step")
     ax.set_ylabel("opinion")
+    if yscale == "symlog":
+        ax.set_yscale("symlog", linthresh=symlog_linthresh)
     ax.grid(alpha=0.35)
-    ax.legend(fontsize="small")
-    fig.tight_layout()
+    legend = ax.legend(fontsize="small")
+    for handle in legend.legend_handles:
+        handle.set_alpha(1)
+
+    final_opinions = [opinion for _, opinion in final]
+    opinion_limits = ax.get_ylim()
+    histogram_bins = _equal_display_height_bins(ax, opinion_limits, count=50)
+    distribution_ax.hist(
+        final_opinions,
+        bins=histogram_bins,
+        weights=[100 / len(final_opinions)] * len(final_opinions),
+        orientation="horizontal",
+        color="red",
+        alpha=0.8,
+    )
+    distribution_ax.set_xlim(0, 100)
+    distribution_ax.set_ylim(opinion_limits)
+    distribution_ax.set_xticks([0, 100], labels=["0%", "100%"])
+    distribution_ax.xaxis.set_ticks_position("top")
+    distribution_ax.tick_params(axis="y", labelleft=False, labelright=True)
+    distribution_ax.yaxis.set_label_position("right")
+    distribution_ax.set_ylabel("final distribution")
+    distribution_ax.grid(axis="x", alpha=0.35)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
 
 
-def _read_snapshot_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
-    if not rows:
-        raise ValueError("snapshots file is empty")
-    return rows
+def _equal_display_height_bins(
+    axis: Any,
+    limits: tuple[float, float],
+    *,
+    count: int,
+) -> list[float]:
+    """Return data-space bin edges with equal heights in the active y scale."""
+
+    transform = axis.yaxis.get_transform()
+    transformed_lower, transformed_upper = transform.transform(limits)
+    transformed_edges = [
+        transformed_lower
+        + (transformed_upper - transformed_lower) * index / count
+        for index in range(count + 1)
+    ]
+    return [float(edge) for edge in transform.inverted().transform(transformed_edges)]
 
 
 def _build_opinion_plot_title(snapshots_csv: Path, selected: SnapshotSeries) -> str:
@@ -798,31 +853,92 @@ def _format_opinion_range(variant: dict[str, Any]) -> str:
     return domain_ranges.get(str(variant.get("domain", "")), "")
 
 
-def _select_snapshot_series(
-    rows: list[dict[str, str]],
+def _read_opinion_trajectories(
+    snapshots_csv: Path,
     *,
     scenario: str | None,
     variant: str | None,
     normalizer: str | None,
     normalization_every: str | None,
     run_seed: str | None,
-) -> SnapshotSeries:
-    candidates = sorted(
-        {
-            SnapshotSeries(
+    max_agents: int | None,
+) -> tuple[SnapshotSeries, dict[int, list[tuple[int, float]]]]:
+    """Read only the first matching snapshot series into memory."""
+
+    normalization_filter = (
+        ""
+        if normalizer == "none" and normalization_every is None
+        else normalization_every
+    )
+    exact_series = all(
+        value is not None
+        for value in (
+            scenario,
+            variant,
+            normalizer,
+            normalization_filter,
+            run_seed,
+        )
+    )
+    selected: SnapshotSeries | None = None
+    trajectories: dict[int, list[tuple[int, float]]] = defaultdict(list)
+    row_count = 0
+    with snapshots_csv.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            row_count += 1
+            candidate = SnapshotSeries(
                 row["scenario"],
                 row["variant"],
                 row["normalizer"],
                 row["normalization_every"],
                 row["run_seed"],
             )
-            for row in rows
-        },
-    )
-    filtered = [
-        candidate
-        for candidate in candidates
-        if (scenario is None or candidate.scenario == scenario)
+            if not _snapshot_series_matches_filters(
+                candidate,
+                scenario=scenario,
+                variant=variant,
+                normalizer=normalizer,
+                normalization_every=normalization_filter,
+                run_seed=run_seed,
+            ):
+                if selected is not None and exact_series:
+                    break
+                continue
+            if selected is None or candidate < selected:
+                selected = candidate
+                trajectories.clear()
+            if candidate != selected:
+                continue
+
+            agent = int(row["agent"])
+            if max_agents is not None and agent not in trajectories:
+                if max_agents <= 0:
+                    continue
+                if len(trajectories) >= max_agents:
+                    largest_agent = max(trajectories)
+                    if agent >= largest_agent:
+                        continue
+                    del trajectories[largest_agent]
+            trajectories[agent].append((int(row["step"]), float(row["opinion"])))
+
+    if row_count == 0:
+        raise ValueError("snapshots file is empty")
+    if selected is None:
+        raise ValueError("No snapshot series matched the selected filters")
+    return selected, trajectories
+
+
+def _snapshot_series_matches_filters(
+    candidate: SnapshotSeries,
+    *,
+    scenario: str | None,
+    variant: str | None,
+    normalizer: str | None,
+    normalization_every: str | None,
+    run_seed: str | None,
+) -> bool:
+    return (
+        (scenario is None or candidate.scenario == scenario)
         and (variant is None or candidate.variant == variant)
         and (normalizer is None or candidate.normalizer == normalizer)
         and (
@@ -830,45 +946,4 @@ def _select_snapshot_series(
             or candidate.normalization_every == normalization_every
         )
         and (run_seed is None or candidate.run_seed == run_seed)
-    ]
-    if not filtered:
-        raise ValueError("No snapshot series matched the selected filters")
-    return filtered[0]
-
-
-def _build_agent_trajectories(
-    rows: list[dict[str, str]],
-    selected: SnapshotSeries,
-    *,
-    max_agents: int | None,
-) -> dict[int, list[tuple[int, float]]]:
-    agent_ids = sorted(
-        {
-            int(row["agent"])
-            for row in rows
-            if _row_matches_series(row, selected)
-        },
-    )
-    if max_agents is not None:
-        agent_ids = agent_ids[:max_agents]
-    selected_agents = set(agent_ids)
-
-    trajectories: dict[int, list[tuple[int, float]]] = defaultdict(list)
-    for row in rows:
-        if not _row_matches_series(row, selected):
-            continue
-        agent = int(row["agent"])
-        if agent not in selected_agents:
-            continue
-        trajectories[agent].append((int(row["step"]), float(row["opinion"])))
-    return trajectories
-
-
-def _row_matches_series(row: dict[str, str], selected: SnapshotSeries) -> bool:
-    return (
-        row["scenario"] == selected.scenario
-        and row["variant"] == selected.variant
-        and row["normalizer"] == selected.normalizer
-        and row["normalization_every"] == selected.normalization_every
-        and row["run_seed"] == selected.run_seed
     )

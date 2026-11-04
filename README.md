@@ -103,6 +103,8 @@ La configuracion de metricas se agrupa en `MetricsConfig`:
 - `cluster_tolerance`
 - `record_every`
 - `store_opinion_snapshots`
+- `store_normalization_events` (desactivalo en barridos largos con intervalos
+  pequenos para evitar retener un evento por normalizacion y replica)
 - `store_interaction_events`
 
 La extremizacion se define de forma explicita por dominio:
@@ -299,6 +301,26 @@ Cuando `--normalizer` no es `none`, `--normalization-every` es obligatorio y
 debe ser positivo. Esto evita ejecutar silenciosamente un experimento sin
 normalizacion por una configuracion incompleta.
 
+## Umbrales dinamicos
+
+El experimento 0.7 mantiene las opiniones sin clipping ni normalizacion y adapta
+los umbrales a la escala relativa de cada ejecucion. La variante usa
+`threshold_mode: max_abs`; `threshold_update_every` indica cuantos pasos se
+completan entre actualizaciones. El primer intervalo emplea los umbrales ya
+transformados al dominio de la variante. En cada actualizacion posterior se usa
+el cociente entre el maximo absoluto actual y el maximo absoluto inicial.
+
+`threshold_scale: 2.0` transforma una sola vez los umbrales de `[0,1]` a
+`[-1,1]`. El escalado dinamico se aplica despues sobre esos valores efectivos.
+Si el maximo inicial es cero se conservan los umbrales iniciales. Un valor no
+finito en las opiniones, en la escala o en los umbrales detiene la ejecucion con
+un `FloatingPointError` que identifica el paso; no se aplica ningun limite
+artificial.
+
+```powershell
+atbcr --config experiments/experiment_0.7.yaml
+```
+
 ## Inicializacion de opiniones
 
 Uniforme en un rango concreto:
@@ -372,7 +394,7 @@ segundo. No contiene resultados hardcodeados.
 ## Plots
 
 El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
-`atbcr`. Tiene ocho subcomandos:
+`atbcr`. Tiene nueve subcomandos:
 
 - `metric`: lee `trajectories.csv` y dibuja una metrica temporal por serie
   `scenario/variant/normalizer/normalization_every`. Por defecto usa
@@ -389,7 +411,12 @@ El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
 - `opinions`: lee `snapshots.csv` y dibuja como cambian las opiniones de los
   agentes a lo largo del tiempo para una replica concreta. Se puede filtrar por
   `--scenario`, `--variant`, `--normalizer`, `--normalization-every` y
-  `--run-seed`.
+  `--run-seed`. `--yscale symlog` permite representar simultaneamente valores
+  pequenos, cero y opiniones positivas o negativas de gran magnitud.
+- `opinion-metrics`: deriva, desde `final_opinions.csv` o `snapshots.csv`, la
+  proporcion de agentes con `|x_i| < 1`, `min_i |x_i|` y
+  `min_{i != j} |x_i - x_j|`. Escribe un CSV compacto y permite filtrar por
+  `--epsilon`, `--theta`, variante, normalizador, frecuencia y semilla.
 - `extremized-heatmap`: lee `summary.csv` y representa
   `extremized_share_mean` para cada combinacion de epsilon y theta. Acepta
   columnas `epsilon` y `theta`, o nombres de escenario generados por la rejilla
@@ -400,10 +427,15 @@ El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
   varios argumentos `--pair EPSILON THETA` para comparar las distribuciones en
   subplots con bins y escalas compartidos. El rango de opinion se obtiene del
   dominio de la variante; para dominios no acotados se usan los datos observados.
+  `--run-seed` limita las distribuciones a una sola ejecucion Monte Carlo.
 - `extremized-trajectory`: lee `trajectories.csv` y representa la media entre
   replicas de `extremized_share(t)`. Acepta `--epsilon` y `--theta` para una
   curva, o varios argumentos `--pair EPSILON THETA` para comparar curvas con
   leyenda en una misma figura.
+- `stability`: lee uno o varios `snapshots.csv` y calcula, para cada ejecucion e
+  intervalo entre snapshots consecutivos, el maximo cambio absoluto de opinion
+  entre agentes. Permite seleccionar una replica con `--run-seed`, procesa el
+  archivo por bloques y puede crear un CSV compacto reutilizable.
 
 Todos los subcomandos que generan figuras requieren `--output` con la ruta del
 archivo de imagen. La extension elegida determina el formato que escribira
@@ -416,12 +448,113 @@ atbcr-plot compare --input runs/experiment_0.3/trajectories.csv --pair 0.2 0.7 -
 atbcr-plot distribution runs/reference/snapshots.csv --bins 50 --output runs/reference/final_distribution.png
 atbcr-plot final-opinions runs/reference/snapshots.csv
 atbcr-plot opinions runs/reference/snapshots.csv --scenario repulsivo --variant unbounded --normalizer max_abs --normalization-every 100 --run-seed 7 --output runs/reference/opinions.png
+atbcr-plot opinions runs/experiment_0.3/snapshots.csv --scenario e0p2_t0p7 --variant unbounded --normalizer none --run-seed 7 --yscale symlog --symlog-linthresh 1 --output runs/experiment_0.3/opinions_e0p2_t0p7_seed7_symlog.png
+atbcr-plot opinion-metrics runs/experiment_0.3/final_opinions.csv --epsilon 0.2 --theta 0.7 --variant unbounded --normalizer none --run-seed 7 --output runs/experiment_0.3/opinion_metrics_e0p2_t0p7_seed7.csv
 atbcr-plot extremized-heatmap runs/grid/summary.csv --variant unbounded --normalizer none --output runs/grid/extremized.png
 atbcr-plot parameter-distribution runs/experiment_0.1/final_opinions.csv --epsilon 0.2 --theta 0.7 --variant baseline_01 --normalizer none --output runs/experiment_0.1/distribution_e0p2_t0p7.png
 atbcr-plot parameter-distribution runs/experiment_0.1/final_opinions.csv --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --variant baseline_01 --normalizer none --output runs/experiment_0.1/distributions_comparison.png
+atbcr-plot parameter-distribution runs/experiment_0.4/final_opinions.csv --pair 0.2 0.7 --pair 0.3 0.8 --variant unbounded --normalizer max_abs --normalization-every 10 --run-seed 7 --output runs/experiment_0.4/distributions_seed_7.png
 atbcr-plot extremized-trajectory runs/experiment_0.3/trajectories.csv --epsilon 0.2 --theta 0.7 --variant unbounded --normalizer none --output runs/experiment_0.3/extremized_e0p2_t0p7.png
 atbcr-plot extremized-trajectory runs/experiment_0.3/trajectories.csv --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --variant unbounded --normalizer none --output runs/experiment_0.3/extremized_comparison.png
+atbcr-plot stability --input runs/experiment_0.4/snapshots.csv --scenarios e0p2_t0p7 --variants unbounded --normalizers max_abs --normalization-every 10 100 1000 10000 --run-seed 7 --cache runs/experiment_0.4/stability_run7.csv --output runs/experiment_0.4/stability_run7.png
 ```
+
+### Ejecutar varias graficas en paralelo
+
+Para generar varias graficas independientes a la vez, copia
+`scripts/plot_commands.example.txt`, deja un comando completo por linea y
+ejecuta:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_parallel.py scripts\plot_commands.txt --jobs 4
+```
+
+`--jobs` limita el numero de procesos simultaneos para no agotar la memoria.
+Las lineas vacias y las que empiezan por `#` se ignoran. La salida lleva el
+numero del comando como prefijo y el proceso devuelve codigo `1` si falla al
+menos uno. Antes de lanzar un lote largo se puede comprobar con `--dry-run`.
+
+Tambien se pueden pasar comandos directamente repitiendo `--command`:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_parallel.py --jobs 2 `
+  --command "atbcr-plot final-opinions runs/experiment_0.1/snapshots.csv" `
+  --command "atbcr-plot final-opinions runs/experiment_0.3/snapshots.csv"
+```
+
+### Metricas derivadas de opiniones finales o snapshots
+
+`opinion-metrics` genera una fila por replica y `step`, con estas columnas:
+
+- `proportion_abs_lt_1`: proporcion de agentes que permanece en el intervalo
+  inicial abierto `(-1, 1)`;
+- `closest_to_zero_agent` y `min_abs_opinion`: agente mas proximo a cero y su
+  distancia absoluta;
+- `closest_pair_agent_i`, `closest_pair_agent_j` y `min_pairwise_distance`:
+  pareja de agentes mas proxima y distancia entre sus opiniones;
+- `confidence_epsilon`: umbral efectivo de confianza, incluyendo el
+  `threshold_scale` de la variante registrado en `config.json`;
+- `confidence_pair_exists`: `True` cuando
+  `min_pairwise_distance < confidence_epsilon`, la desigualdad estricta usada
+  por el modelo ATBCR.
+
+```powershell
+atbcr-plot opinion-metrics `
+  runs/experiment_0.3/final_opinions.csv `
+  --epsilon 0.2 `
+  --theta 0.7 `
+  --variant unbounded `
+  --normalizer none `
+  --run-seed 7 `
+  --output runs/experiment_0.3/opinion_metrics_e0p2_t0p7_seed7.csv
+```
+
+Con `final_opinions.csv` se obtiene una fila final por replica sin recorrer la
+historia completa. Si se usa `snapshots.csv`, se obtiene la evolucion de las
+metricas para cada `step` almacenado. Con una semilla y filtros exactos, el
+lector se detiene al terminar el bloque contiguo seleccionado y solo conserva
+un estado en memoria. `snapshot-metrics` se mantiene como alias compatible.
+Para grafos no completos, `confidence_pair_exists` indica que existe una pareja
+de opiniones suficientemente proxima, pero no garantiza que esa pareja sea una
+arista del grafo.
+
+### Estabilidad entre snapshots
+
+`stability` calcula
+`Delta_max(t) = max_i |x_i(t) - x_i(t_prev)|`, donde `t_prev` es el snapshot
+almacenado anterior de la misma replica. El valor se calcula por ejecucion
+Monte Carlo e intervalo exacto. Si no se selecciona `--run-seed`, se representa
+la media de las replicas que comparten configuracion e intervalo.
+
+```powershell
+atbcr-plot stability `
+  --input runs/experiment_0.4/snapshots.csv `
+  --scenarios e0p2_t0p7 `
+  --variants unbounded `
+  --normalizers max_abs `
+  --normalization-every 10 100 1000 10000 `
+  --run-seed 7 `
+  --chunk-size 10000 `
+  --cache runs/experiment_0.4/stability_e0p2_t0p7_run7.csv `
+  --output runs/experiment_0.4/stability_e0p2_t0p7_run7.pdf
+```
+
+`--input` acepta varios archivos. Los filtros `--scenarios`, `--variants`,
+`--normalizers` y `--normalization-every` aceptan uno o varios valores. Para
+seleccionar la frecuencia vacia del normalizador `none` se puede usar
+`--normalization-every none`. Cada punto de la figura corresponde a un cambio
+entre dos snapshots almacenados, que pueden estar separados por varios pasos de
+simulacion. El lector conserva solo dos snapshots de la ejecucion seleccionada
+para emparejar agentes. Cuando todos los filtros y `--run-seed` estan definidos,
+busca los bloques exactos mediante un mapa de archivo paginado: no carga los
+46 GB en RAM y solo parsea las ejecuciones seleccionadas. El recorrido general
+usa bloques acotados por `--chunk-size` como alternativa cuando faltan filtros.
+
+`--cache` guarda un CSV compacto con una fila por ejecucion e intervalo y un
+archivo lateral de metadatos. En invocaciones posteriores se reutiliza si el
+tamaño y la fecha de los `snapshots.csv`, los filtros y la semilla no han
+cambiado. `--refresh-cache` fuerza su reconstruccion. El progreso de lectura se
+muestra por bytes; `--no-progress` lo desactiva.
 
 ### Comparaciones temporales genericas
 

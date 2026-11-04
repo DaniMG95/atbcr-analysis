@@ -1,0 +1,4 @@
+atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k1 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_1.png
+atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k10 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_10.png
+atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k1000 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_1000.png
+

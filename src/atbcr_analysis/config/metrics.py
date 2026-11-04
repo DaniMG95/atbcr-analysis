@@ -15,6 +15,7 @@ class MetricsConfig(BaseModel):
     cluster_tolerance: float = Field(default=1e-3, ge=0)
     record_every: int = Field(default=500, ge=1)
     store_opinion_snapshots: bool = True
+    store_normalization_events: bool = True
     store_interaction_events: bool = False
 
     @model_validator(mode="after")

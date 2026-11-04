@@ -1,0 +1,16 @@
+atbcr-plot compare --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --input runs/experiment_0.6/trajectories.csv --metric std_opinion  --aggregate mean --output runs/experiment_0.6/std_compare.png
+atbcr-plot compare --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --input runs/experiment_0.6/trajectories.csv --metric confidence_frequency_window  --aggregate mean --output runs/experiment_0.6/confidence_compare.png
+atbcr-plot compare --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --input runs/experiment_0.6/trajectories.csv --metric repulsion_frequency_window  --aggregate mean --output runs/experiment_0.6/repulsion_compare.png
+atbcr-plot compare --pair 0.2 0.7 --pair 0.3 0.8 --pair 0.4 0.9 --input runs/experiment_0.6/trajectories.csv --metric max_abs_opinion  --aggregate mean --output runs/experiment_0.6/max_compare.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p2_t0p7 --variant dynamic_thresholds_k1 --run-seed 7 --output runs/experiment_0.6/opinions_e0p2_t0p7_seed7_every_1.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p2_t0p7 --variant dynamic_thresholds_k10 --run-seed 7 --output runs/experiment_0.6/opinions_e0p2_t0p7_seed7_every_10.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p2_t0p7 --variant dynamic_thresholds_k1000 --run-seed 7 --output runs/experiment_0.6/opinions_e0p2_t0p7_seed7_every_1000.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p3_t0p8 --variant dynamic_thresholds_k1 --run-seed 7 --output runs/experiment_0.6/opinions_e0p3_t0p8_seed7_every_1.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p3_t0p8 --variant dynamic_thresholds_k10 --run-seed 7 --output runs/experiment_0.6/opinions_e0p3_t0p8_seed7_every_10.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p3_t0p8 --variant dynamic_thresholds_k1000 --run-seed 7 --output runs/experiment_0.6/opinions_e0p3_t0p8_seed7_every_1000.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p4_t0p9 --variant dynamic_thresholds_k1 --run-seed 7 --output runs/experiment_0.6/opinions_e0p4_t0p9_seed7_every_1.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p4_t0p9 --variant dynamic_thresholds_k10 --run-seed 7 --output runs/experiment_0.6/opinions_e0p4_t0p9_seed7_every_10.png
+atbcr-plot opinions runs/experiment_0.6/snapshots.csv --scenario e0p4_t0p9 --variant dynamic_thresholds_k1000 --run-seed 7 --output runs/experiment_0.6/opinions_e0p4_t0p9_seed7_every_1000.png
+atbcr-plot distribution --pair 0.2 0.7 --variant dynamic_thresholds_k1 runs/experiment_0.6/snapshots.csv --bins 50 --output runs/experiment_0.3/final_distribution_every_1.png
+atbcr-plot distribution --pair 0.2 0.7 --variant dynamic_thresholds_k10 runs/experiment_0.6/snapshots.csv --bins 50 --output runs/experiment_0.3/final_distribution_every_10.png
+atbcr-plot distribution --pair 0.2 0.7 --variant dynamic_thresholds_k1000 runs/experiment_0.6/snapshots.csv --bins 50 --output runs/experiment_0.3/final_distribution_every_1000.png

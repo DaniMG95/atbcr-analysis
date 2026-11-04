@@ -19,7 +19,7 @@
   round-precision = 2
 }
 
-\title{Analisis ATCBR normalizacion}
+\title{Analisis ATBCR normalizacion}
 \author{dani16595 }
 \date{October 2026}
 
@@ -272,13 +272,13 @@ El objetivo de este experimento es verificar que la transformación del espacio 
 
 Esta validación es necesaria para los experimentos posteriores, en los que se estudiará la eliminación del mecanismo de no superar rangos y la aplicación de estrategias de normalización sobre un espacio de opiniones centrado en cero.
 
-\subsection{Configuración experimenta}
+\subsection{Configuración experimental}
 
 \begin{itemize}
     \item Opiniones iniciales: distribución uniforme en $[-1,1]$.
     \item Dominio de opiniones: $[-1,1]$, aplicando el clipping original del ATBCR.
-    \item Umbrales de confianza: $\epsilon\in\{0.4,0.6,0.8\}$.
-    \item Umbrales de repulsión: $\theta\in\{1.4,1.6,1.8\}$.
+    \item Umbrales de confianza: $\epsilon\in\{0.2,0.4,0.6\}$.
+    \item Umbrales de repulsión: $\theta\in\{0.7,0.8,0.9\}$.
 \end{itemize}
 
 Sean $x_i(t)\in[0,1]$ las opiniones del modelo original. Se define la transformación afín
@@ -293,11 +293,8 @@ Por tanto, para preservar las condiciones que activan las reglas de confianza, i
 \begin{equation}
  \epsilon'=2\epsilon,\qquad \theta'=2\theta.
 \end{equation}
-Se mantiene el mismo coeficiente $\mu$, y el \emph{clipping} original a $[0,1]$ se transforma en \emph{clipping} a $[-1,1]$. Bajo la misma secuencia de encuentros y las condiciones iniciales correspondientes, esta transformación es equivalente paso a paso. Además, predice
-\begin{equation}
- \sigma_Y(t)=2\sigma_X(t),
-\end{equation}
-puesto que $y_i-\bar y=2(x_i-\bar x)$. El desplazamiento de la media por sí solo no altera la desviación estándar: la duplicación procede del factor de escala.
+Se mantiene el mismo coeficiente $\mu$, y el dominio original a $[0,1]$ se transforma en dominio a $[-1,1]$. Bajo la misma secuencia de encuentros y las condiciones iniciales correspondientes, esta transformación es equivalente paso a paso.
+
 
 \subsection{Resultados}
 La Tabla~\ref{tab:resultados} muestra la fracción media de agentes extremizados (en porcentaje) y la desviación estándar media de las opiniones finales en cada dominio. Las proporciones de extremización son idénticas en las dos representaciones; las desviaciones estándar del dominio centrado son el doble de las originales.
@@ -310,7 +307,7 @@ La Tabla~\ref{tab:resultados} muestra la fracción media de agentes extremizados
 \toprule
 $\epsilon$ & $\theta$ & $E_{[0,1]}$ (\%) & $E_{[-1,1]}$ (\%) & $\overline{\sigma}_{[0,1]}$ & $\overline{\sigma}_{[-1,1]}$ \\
 \midrule
-0.2 & 0.7 & 59.11 & 59.11 & 0.384221 & 0.768441 \\
+0.2 & 0.7 & 59.11 & 59.12 & 0.384221 & 0.768441 \\
 0.2 & 0.8 & 39.99 & 39.99 & 0.316027 & 0.632054 \\
 0.2 & 0.9 & 3.68 & 3.68 & 0.240565 & 0.481131 \\
 0.3 & 0.7 & 59.86 & 59.86 & 0.386528 & 0.773055 \\
@@ -349,13 +346,8 @@ El objetivo de este experimento es estudiar las consecuencias de eliminar la res
 
 \subsection{Configuración experimental}
 
+Se replica lo mismo que el caso anterior pero cambiando, solamente, no existen limites de dominio.
 
-\begin{itemize}
-    \item Opiniones iniciales: distribución uniforme en $[-1,1]$.
-    \item Dominio de opiniones: sin limites.
-    \item Umbrales de confianza: $\epsilon\in\{0.4,0.6,0.8\}$.
-    \item Umbrales de repulsión: $\theta\in\{1.4,1.6,1.8\}$.
-\end{itemize}
 
 
 \subsection{Crecimiento de las opiniones y dispersión}
@@ -551,26 +543,20 @@ Las distribuciones finales son diferentes de las del modelo acotado de referenci
 
 
 
-\section{Experimento 0.5: normalización logarítmica con signo}
-\label{sec:exp05}
+\section{Normalización logarítmica con signo}
 
 \subsection{Objetivo}
 
 El objetivo de este experimento es estudiar el comportamiento del modelo ATBCR cuando se aplica una normalización periódica basada en una transformación logarítmica con signo.
 
-Esta propuesta surge como alternativa a la normalización lineal mediante máximo absoluto, estudiada en el Experimento 0.4, que mostró una concentración considerable de las opiniones alrededor de cero y una modificación del régimen de interacción respecto al modelo de referencia.
+Esta propuesta surge como alternativa a la normalización usando máximo absoluto, estudiada en el experimento anterior.
 
-Se pretende determinar si una transformación no lineal permite controlar las magnitudes de opinión manteniendo una mayor separación entre los agentes y conservando mejor la estructura de las distribuciones finales.
+Se pretende determinar si esta transformación permite controlar la opinión manteniendo una mayor separación entre los agentes y conservando mejor la estructura de las distribuciones finales.
 
 \subsection{Formulación de la normalización}
 
-Dado un conjunto de opiniones
+Se ha tenido que cambiar el procedimiento para aplicar inicialmente una transformación logarítmica que conserva el signo de cada opinión, esto se debe a que primero el logaritmo de valores negativos y de 0, no se existe por lo tanto, lo que se ha realizado es ha realizado el siguiente cambio.
 
-\begin{equation}
-    X(t)=\{x_1(t),x_2(t),\ldots,x_N(t)\},
-\end{equation}
-
-se aplica inicialmente una transformación logarítmica que conserva el signo de cada opinión:
 
 \begin{equation}
     z_i(t)=
@@ -578,7 +564,7 @@ se aplica inicialmente una transformación logarítmica que conserva el signo de
     \ln(1+|x_i(t)|).
 \end{equation}
 
-La transformación permite operar sobre todo el dominio real, incluyendo opiniones negativas y el valor cero.
+La transformación permite operar sobre todo el dominio real, incluyendo opiniones negativas y el valor cero, ya que guardamos su signo con la funcion sgn, y se aplica el logaritmo a la magnitud absoluta de la opinión, sumando 1 para evitar el logaritmo de cero.
 
 Posteriormente, se calcula el máximo absoluto de las opiniones transformadas:
 
@@ -586,61 +572,26 @@ Posteriormente, se calcula el máximo absoluto de las opiniones transformadas:
     m_z(t)=\max_j |z_j(t)|.
 \end{equation}
 
-Finalmente, para $m_z(t)>0$, la normalización se define mediante:
+Finalmente, la normalización se define mediante:
 
 \begin{equation}
     x_i^{\mathrm{norm}}(t)=
     \frac{z_i(t)}{m_z(t)}.
 \end{equation}
 
-En el caso degenerado $m_z(t)=0$, todas las opiniones transformadas son nulas y se mantiene el estado cero.
-
 Esta operación garantiza que las opiniones normalizadas pertenecen al intervalo $[-1,1]$.
 
-A diferencia de la normalización lineal, la transformación logarítmica comprime en mayor medida las magnitudes elevadas. Como consecuencia, las opiniones de menor magnitud pueden mantener una separación relativa mayor respecto a las opiniones extremas después de normalizar.
-
-No obstante, esta transformación modifica las distancias absolutas entre agentes y, por tanto, puede alterar las reglas de interacción que se activan cuando los umbrales de confianza y repulsión permanecen constantes.
+A diferencia de la normalización con el valor máximo, la transformación logarítmica contrae en mayor medida las magnitudes elevadas. Como consecuencia, las opiniones de menor magnitud pueden mantener una separación mayor respecto a las opiniones extremas después de normalizar.
 
 \subsection{Configuración experimental}
 
-Se mantiene la configuración experimental utilizada en los experimentos anteriores:
+Se mantiene la configuración experimental utilizada en los experimentos anteriores, pero ahora aplicando este tipo de normalización logarítmica con signo. La normalización se aplica cada $k\in\{10,100,1000,10000\}$ pasos.
 
-\begin{itemize}
-    \item Número de agentes: $N=1000$.
-    \item Topología: grafo completo.
-    \item Número de pasos: $T=100000$.
-    \item Número de ejecuciones Monte Carlo:
-          100 por configuración.
-    \item Parámetro de actualización: $\mu=0.1$.
-    \item Inicialización uniforme de las opiniones
-          en $[-1,1]$.
-    \item Evolución sin clipping entre normalizaciones.
-    \item Frecuencias de normalización:
-          $k\in\{10,100,1000,10000\}$.
-\end{itemize}
-
-Se consideran las nueve combinaciones de umbrales establecidas en el diseño experimental:
-
-\begin{equation}
-    \epsilon\in\{0.2,0.3,0.4\},
-    \qquad
-    \theta\in\{0.7,0.8,0.9\}.
-\end{equation}
-
-Siguiendo el criterio de los experimentos 0.2--0.4, los umbrales aplicados sobre el dominio $[-1,1]$ son los transformados:
-
-\begin{equation}
-    \epsilon'=2\epsilon,
-    \qquad
-    \theta'=2\theta.
-\end{equation}
-
-La normalización se aplica periódicamente después de ejecutar los correspondientes pasos de interacción.
 
 \subsection{Evolución de las frecuencias de interacción}
 \label{subsec:exp05_frecuencias}
 
-Se analiza la evolución temporal de las frecuencias de confianza, inacción y repulsión utilizando ventanas temporales de 1000 pasos.
+Se analiza la evolución temporal de las frecuencias de confianza, inacción y repulsión.
 
 La Figura~\ref{fig:exp05_frequencies} muestra las frecuencias de confianza y repulsión para diferentes umbrales y periodos de normalización.
 
@@ -661,21 +612,21 @@ La Figura~\ref{fig:exp05_frequencies} muestra las frecuencias de confianza y rep
         \label{fig:exp05_repulsion}
     \end{subfigure}
 
-    \caption{Evolución temporal de las frecuencias de confianza y repulsión del ATBCR sin clipping con normalización logarítmica con signo. Las frecuencias corresponden a ventanas temporales de 1000 pasos y las curvas muestran los resultados agregados de las ejecuciones Monte Carlo.}
+    \caption{Evolución temporal de las frecuencias de confianza y repulsión del ATBCR con normalización logarítmica con signo. Las curvas muestran los resultados agregados de las ejecuciones Monte Carlo.}
     \label{fig:exp05_frequencies}
 \end{figure}
 
-Los resultados muestran que la normalización logarítmica puede generar regímenes de interacción cualitativamente diferentes en función del intervalo de normalización y de los umbrales considerados.
+Los resultados muestran que la normalización logarítmica puede generar momentos de interacción diferentes en función de los pasos de normalización y de los umbrales considerados.
 
-Para normalizaciones frecuentes, se observan configuraciones en las que la confianza coexiste con una proporción importante de repulsión.
+Para normalizaciones con menor numero de pasos, se observan que la confianza coexiste con un equilibrio importante de repulsión.
 
-Sin embargo, al aumentar el intervalo entre normalizaciones, una parte de las interacciones repulsivas puede pasar al régimen de inacción, sin que ello suponga necesariamente un aumento equivalente de la frecuencia de confianza.
+Sin embargo, al aumentar el intervalo entre las normalizaciones, una parte de las interacciones repulsivas puede pasar al régimen de inacción.
 
 La Tabla~\ref{tab:exp05_interacciones} presenta un ejemplo correspondiente al escenario $(\epsilon,\theta)=(0.2,0.7)$ y a una ejecución con semilla 7.
 
 \begin{table}[htbp]
     \centering
-    \caption{Frecuencias de interacción en la última ventana temporal del Experimento 0.5 para el escenario $(\epsilon,\theta)=(0.2,0.7)$ y la ejecución con semilla 7.}
+    \caption{Frecuencias de interacción en la última ventana temporal del Experimento para el escenario $(\epsilon,\theta)=(0.2,0.7)$ y la ejecución con semilla 7.}
     \label{tab:exp05_interacciones}
 
     \begin{tabular}{rccc}
@@ -693,9 +644,7 @@ La Tabla~\ref{tab:exp05_interacciones} presenta un ejemplo correspondiente al es
     \end{tabular}
 \end{table}
 
-Este ejemplo muestra que reducir la frecuencia de normalización puede modificar sustancialmente la proporción de interacciones repulsivas y de inacción.
-
-Asimismo, las configuraciones estudiadas evidencian que no existe una relación monótona sencilla entre la frecuencia de normalización y el predominio de las interacciones de confianza.
+Este ejemplo muestra que reducir la frecuencia de normalización puede modificar sustancialmente la proporción de interacciones repulsivas y de inacción, ademas, las configuraciones estudiadas muestran que no existe una relación entre la frecuencia de normalización y el dominio de las interacciones de confianza.
 
 \subsection{Distribuciones finales de opinión}
 \label{subsec:exp05_distribuciones}
@@ -712,187 +661,642 @@ La Figura~\ref{fig:exp05_distributions} compara las distribuciones finales corre
 
 \begin{figure}[htbp]
     \centering
-    \includefigureorplaceholder[width=0.95\textwidth]
-    {figures/exp05_distributions.pdf}
+    \includegraphics[width=0.95\textwidth]
+    {imagenes/experimento_5/distributions.png}
 
-    \caption{Distribuciones finales de opinión para $k\in\{10,100,1000,10000\}$ con normalización logarítmica con signo y $(\epsilon,\theta)=(0.2,0.7)$. Los histogramas representan las opiniones finales agregadas de las ejecuciones Monte Carlo.}
+    \caption{Distribuciones finales de opinión para $k\in\{10,100,1000,10000\}$ con normalización logarítmica con signo y $(\epsilon,\theta)=(0.2,0.7)$. Se representan las opiniones finales agregadas de las ejecuciones Monte Carlo.}
     \label{fig:exp05_distributions}
 \end{figure}
 
 Los resultados muestran una dependencia clara entre la frecuencia de normalización y la organización final de las opiniones.
 
-Cuando la normalización se aplica cada 10 pasos, se observa una distribución fuertemente bimodal, con dos agrupaciones próximas a opiniones negativas y positivas de magnitud elevada.
+Cuando la normalización se aplica cada 10 pasos, se observa una distribución con dos agrupaciones próximas a opiniones negativas y positivas.
 
-Al aumentar el intervalo a 100 pasos, la distribución continúa siendo bimodal, aunque las agrupaciones aparecen ligeramente desplazadas hacia el centro y presentan una mayor dispersión.
+Al aumentar el intervalo a 100 pasos, la distribución continúa siendo bimodal, aunque aparecen ligeramente desplazadas hacia el centro y mas dispersas.
 
 Para normalizaciones cada 1000 pasos, siguen observándose dos agrupaciones diferenciadas, pero con opiniones de menor magnitud absoluta.
 
-Finalmente, al normalizar cada 10000 pasos, la distribución presenta una concentración predominantemente central, sin la separación bimodal observada en las frecuencias anteriores.
+Finalmente, al normalizar cada 10000 pasos, la distribución presenta una concentración central, sin la separación bimodal observada en las frecuencias anteriores.
 
 Por tanto, la frecuencia de normalización influye tanto en las reglas de interacción como en las distribuciones finales del modelo.
 
 \subsection{Análisis de ejecuciones individuales}
 \label{subsec:exp05_individual}
 
-Para comprobar si la bimodalidad observada era consecuencia de la agregación de múltiples simulaciones, se analizaron histogramas finales de tres ejecuciones Monte Carlo individuales.
+Para comprobar si la bimodalidad observada era consecuencia de la agregación de múltiples simulaciones, se ha realizado histogramas finales de tres ejecuciones Monte Carlo individuales.
 
-Se utilizaron las semillas 7, 8 y 9 para el escenario $(\epsilon,\theta)=(0.2,0.7)$.
+Se utilizaron diferentes semillas 7, 8 y 9 para el escenario $(\epsilon,\theta)=(0.2,0.7)$.
 
-Los resultados muestran que, para frecuencias de normalización de 10, 100 y 1000 pasos, las ejecuciones inspeccionadas presentan dos agrupaciones diferenciadas de opinión.
-
-Por tanto, la bimodalidad también aparece dentro de las simulaciones individuales estudiadas y no se debe exclusivamente a la agregación de réplicas.
-
-Por el contrario, en las ejecuciones con normalización cada 10000 pasos se observa una concentración de las opiniones en una región central.
+Los resultados muestran que no se debe a una agregación de ejecuciones, sino que cada ejecución individual puede presentar estas distribuciones.
 
 La Figura~\ref{fig:exp05_individual} recoge una comparación de estos resultados.
 
 \begin{figure}[htbp]
     \centering
-    \includefigureorplaceholder[width=0.95\textwidth]
-    {figures/exp05_individual_distributions.pdf}
+    \includegraphics[width=0.95\textwidth]
+    {imagenes/experimento_5/individual_distributions}
 
-    \caption{Distribuciones finales de opiniones en ejecuciones Monte Carlo individuales del Experimento 0.5, comparando diferentes frecuencias de normalización. Se utilizan las semillas 7, 8 y 9.}
+    \caption{Distribuciones finales de opiniones en ejecuciones Monte Carlo individuales del Experimento, comparando diferentes frecuencias de normalización. Se utilizan las semillas 7, 8 y 9.}
     \label{fig:exp05_individual}
 \end{figure}
 
-Esta comprobación permite interpretar con mayor precisión los histogramas agregados, aunque no constituye una clasificación exhaustiva de las 100 ejecuciones.
+\subsection{Comparación con la normalización max\_abs}
 
-\subsection{Comparación con la normalización lineal}
+Los resultados del experimento muestran diferencias respecto a la normalización lineal del experimento anterior.
 
-Los resultados del Experimento 0.5 muestran diferencias significativas respecto a la normalización lineal del Experimento 0.4.
+Mientras que la normalización mediante \texttt{max\_abs} genera una concentración central de las opiniones, la normalización logarítmica con signo puede mantener dos agrupaciones polarizadas.
 
-Mientras que la normalización mediante \texttt{max\_abs} favorece generalmente una concentración central de las opiniones, la normalización logarítmica con signo puede mantener dos agrupaciones polarizadas.
+Con \texttt{max\_abs} se observa valores elevados de confianza en la mayoría de las configuraciones.
 
-Asimismo, con \texttt{max\_abs} se observaron frecuencias elevadas de confianza en la mayoría de las configuraciones.
-
-Por el contrario, \texttt{signed\_log\_max\_abs} permite que las interacciones de confianza coexistan con repulsión o inacción, dependiendo de los parámetros utilizados.
+Por el contrario, \texttt{signed\_log\_max\_abs} permite que las interacciones de confianza existan con repulsión o inacción, dependiendo de los parámetros utilizados.
 
 Sin embargo, la conservación de agrupaciones polarizadas no implica necesariamente una mejor reproducción del ATBCR acotado original.
 
-En el escenario analizado, el modelo de referencia presenta simultáneamente agrupaciones centrales y extremas, mientras que la normalización logarítmica tiende a producir distribuciones bimodales o centrales, en función de la frecuencia de normalización.
+En el escenario analizado, el modelo presenta simultáneamente agrupaciones centrales y extremas, mientras que la normalización logarítmica tiende a producir distribuciones bimodales o centrales, en función de la frecuencia de normalización.
 
-\subsection{Conclusiones del Experimento 0.5}
+\subsection{Conclusiones del Experimento}
 
-La normalización logarítmica con signo constituye una alternativa a la normalización lineal para controlar las magnitudes de opinión en el ATBCR sin clipping.
+La normalización logarítmica con signo constituye una alternativa a la normalización max\_abs para controlar las opiniones en el ATBCR.
 
-Los resultados muestran que esta transformación permite mantener una mayor separación relativa entre determinados grupos de agentes, especialmente cuando se aplica con elevada frecuencia.
+Los resultados muestran que esta transformación permite mantener una mayor separación entre determinados grupos de agentes, especialmente cuando se aplica con elevada frecuencia.
 
-Sin embargo, la frecuencia de normalización condiciona considerablemente el régimen de interacción y la estructura final de las opiniones.
+Sin embargo, los numeros de pasos de normalización afecta al régimen de interacción y la estructura final de las opiniones.
 
-En particular, se han observado distribuciones polarizadas con normalizaciones frecuentes y una concentración central cuando el intervalo de normalización es mayor, en el escenario estudiado.
+Se observa distribuciones polarizadas con normalizaciones frecuentes y una concentración central cuando el intervalo de normalización es mayor, en el escenario estudiado.
 
-Por tanto, aunque la normalización logarítmica evita parte de la compresión central observada con la normalización lineal, no reproduce de forma consistente la estructura del modelo ATBCR acotado.
-
-Los resultados indican que la transformación logarítmica debe considerarse una modificación de la dinámica del modelo y no una simple transformación de escala que conserve sus propiedades originales.
+Los resultados indican que la transformación logarítmica debe considerarse una modificación de la dinámica del modelo y no una simple transformación de escala que conserve las propiedades de ATBCR.
 
 
 
 \section{Conclusiones generales}
 \label{sec:paso0_conclusiones}
 
-El objetivo del Paso 0 ha sido analizar diferentes modificaciones del modelo ATBCR con el propósito de estudiar su comportamiento fuera del dominio acotado original y evaluar mecanismos que permitan controlar las magnitudes de opinión.
+Este objetivo ha sido analizar diferentes modificaciones del modelo ATBCR con el propósito de estudiar su comportamiento fuera del dominio acotado original y evaluar mecanismos que permitan controlar el valor de las opiniones.
 
-Para ello, se realizaron cinco experimentos que permiten diferenciar el efecto del cambio de representación, la eliminación del clipping y la introducción de normalizaciones periódicas.
+Para ello, se realizaron cinco experimentos que permiten diferenciar el efecto del cambio de representación, la eliminación del dominio y la introducción de normalizaciones periódicas.
 
 \subsection{Equivalencia entre dominios}
 
-En primer lugar, el Experimento 0.1 permitió establecer una referencia experimental del modelo ATBCR original en el intervalo $[0,1]$.
+En primer lugar, el primer experimiento permitió establecer una referencia del modelo ATBCR original en el intervalo $[0,1]$.
 
-Posteriormente, el Experimento 0.2 estudió la transformación afín:
+Posteriormente, el segundo expiermento estudió la representacion de las opiniones en el intervalo $[-1,1]$.
 
-\begin{equation}
-    y_i(t)=2x_i(t)-1,
-\end{equation}
+Al transformar proporcionalmente los umbrales de confianza y repulsión, se comprobó que las trayectorias obtenidas conservaban el comportamiento del modelo original.
 
-que permite representar las opiniones en el intervalo $[-1,1]$.
+\subsection{Consecuencias de eliminar el dominio}
 
-Al transformar proporcionalmente los umbrales de confianza y repulsión, se comprobó que las trayectorias obtenidas conservaban el comportamiento del modelo original, salvo las diferencias numéricas inherentes a la representación en coma flotante.
+En el tercer experimento se eliminó la restricción del dominio de las opiniones.
 
-Este resultado permitió disponer de un modelo de referencia en $[-1,1]$ para los experimentos posteriores.
+Los resultados mostraron un crecimiento de las magnitudes de opinión durante todo los pasos estudiados.
 
-\subsection{Consecuencias de eliminar el clipping}
+En las configuraciones estudiadas, la evolución de las magnitudes fue compatible con un crecimiento exponencial.
 
-En el Experimento 0.3 se eliminó la restricción del dominio de las opiniones, permitiendo que estas evolucionaran sobre el conjunto de los números reales.
-
-Los resultados mostraron un crecimiento sostenido de las magnitudes de opinión durante el horizonte temporal analizado.
-
-En las configuraciones estudiadas, la evolución de las magnitudes máximas fue compatible con un crecimiento aproximadamente exponencial.
-
-Además, se observó un incremento progresivo de las frecuencias de interacción repulsiva, acompañado de una disminución de las interacciones de confianza.
-
-Los umbrales de confianza y repulsión influyeron en el tiempo necesario para alcanzar el régimen dominado por repulsión, así como en la evolución de las magnitudes de opinión.
-
-Sin embargo, los resultados obtenidos no constituyen una demostración matemática de divergencia para cualquier configuración o condición inicial.
+Además, se observa un incremento progresivo de las frecuencias de interacción repulsiva, acompañado de una disminución de las interacciones de confianza.
 
 \subsection{Efecto de la normalización lineal}
 
-El Experimento 0.4 introdujo una normalización periódica basada en el máximo absoluto de las opiniones.
+El cuarto experimento introdujo una normalización periódica basada en el máximo absoluto de las opiniones.
 
-Esta estrategia permitió controlar las magnitudes en los instantes de normalización y reducir considerablemente la dispersión observada en el modelo sin clipping.
+Esta estrategia permitió controlar los valores de las opiniones en los instantes de normalización y reducir considerablemente la dispersión observada en el modelo anterior.
 
-Asimismo, se observó un predominio de las interacciones de confianza en la mayoría de las configuraciones.
+Asimismo, se observa un dominio de las interacciones de confianza en la mayoría de las configuraciones.
 
-No obstante, las distribuciones finales presentaron una fuerte concentración central, diferente de la estructura obtenida con el modelo de referencia.
-
-Por otra parte, el análisis del cambio máximo entre snapshots consecutivos mostró una reducción progresiva de las variaciones de opinión, lo que constituye evidencia de estabilización temporal aproximada.
-
-Esta observación no implica necesariamente convergencia matemática ni consenso global.
+No obstante, las distribuciones finales presentaron una fuerte concentración central, diferente de la estructura obtenida con el modelo de reference.
 
 \subsection{Efecto de la normalización logarítmica}
 
-En el Experimento 0.5 se analizó una normalización logarítmica con signo, diseñada para reducir las magnitudes elevadas sin comprimir proporcionalmente todas las opiniones.
+En el quinto experimento se analizó una normalización logarítmica con signo, diseñada para reducir elevadas magnitudes sin comprimir proporcionalmente todas las opiniones.
 
-Los resultados mostraron que esta transformación genera regímenes dinámicos diferentes a los de la normalización lineal.
-
-En particular, se observaron configuraciones con coexistencia de confianza, inacción y repulsión, así como distribuciones finales polarizadas.
+Los resultados mostraron que esta transformación genera regímenes dinámicos diferentes a los de la normalización máxima.
 
 La estructura de dichas distribuciones dependió de la frecuencia de normalización.
 
 En el escenario analizado, las normalizaciones frecuentes generaron agrupaciones bimodales, mientras que las normalizaciones más espaciadas favorecieron una concentración central.
 
-Las comprobaciones realizadas sobre ejecuciones individuales confirmaron que los grupos polarizados observados no eran exclusivamente consecuencia de agregar diferentes simulaciones.
-
-Sin embargo, tampoco esta normalización reprodujo de forma consistente la distribución del ATBCR acotado original.
-
-\subsection{Comparación de las propuestas}
-
-Los resultados obtenidos permiten distinguir tres aspectos fundamentales:
-
-\begin{enumerate}
-    \item La transformación afín del dominio, acompañada de la adaptación correspondiente de los umbrales, conserva la dinámica del modelo de referencia.
-
-    \item La eliminación del clipping puede conducir a un crecimiento sostenido de las magnitudes y a un régimen dominado por repulsión.
-
-    \item Las normalizaciones periódicas controlan las magnitudes, pero también modifican las distancias entre agentes y, por tanto, las reglas de interacción del modelo.
-\end{enumerate}
-
-En consecuencia, la normalización no debe interpretarse únicamente como una operación numérica para mantener las opiniones dentro de un intervalo determinado.
-
-Cuando los umbrales permanecen constantes, la modificación de las distancias puede provocar transiciones entre los regímenes de confianza, inacción y repulsión.
-
-Por tanto, las normalizaciones estudiadas constituyen modificaciones efectivas de la dinámica del ATBCR.
-
-\subsection{Implicaciones para el modelo propuesto}
-
-El análisis desarrollado en el Paso 0 permite identificar varias propiedades relevantes para la construcción de futuras extensiones del ATBCR.
-
-En primer lugar, resulta necesario distinguir entre controlar la magnitud de las opiniones y preservar la estructura de interacciones del modelo.
-
-En segundo lugar, debe considerarse el efecto de cualquier transformación sobre las distancias entre agentes y su relación con los umbrales de confianza y repulsión.
-
-Finalmente, la evaluación de nuevas propuestas no debería limitarse a verificar que las opiniones permanezcan acotadas, sino que también debe estudiar las distribuciones finales, los regímenes de interacción y la estabilidad temporal.
-
-Los experimentos realizados proporcionan una base empírica para diseñar y comparar nuevas formulaciones del modelo, identificando las ventajas y limitaciones de los mecanismos de normalización estudiados.
-
 \subsection{Conclusión final}
 
-Los resultados del Paso 0 muestran que es posible controlar las magnitudes de opinión mediante normalizaciones periódicas, pero que este control puede alterar sustancialmente el comportamiento del modelo ATBCR.
+Los resultados muestran que es posible controlar las opiniones mediante normalizaciones periódicas, pero que este control puede alterar sustancialmente el comportamiento del modelo ATBCR.
 
-La normalización lineal tiende a favorecer la concentración de opiniones, mientras que la normalización logarítmica con signo puede mantener agrupaciones polarizadas en determinadas configuraciones.
+La normalización máxima tiende a favorecer la concentración de opiniones, mientras que la normalización logarítmica con signo puede mantener agrupaciones polarizadas en determinadas configuraciones.
 
 Ninguna de las dos alternativas ha demostrado conservar de forma general la estructura dinámica del modelo acotado original.
 
-En consecuencia, el estudio pone de manifiesto la necesidad de considerar conjuntamente el dominio de las opiniones, las distancias entre agentes y los umbrales de interacción al desarrollar nuevas formulaciones de modelos de dinámica de opiniones.
+
+
+\section{Resolución de dudas: persistencia de opiniones centrales}
+\label{subsec:exp03_opiniones_centrales}
+
+
+\subsection{Persistencia de opiniones centrales}
+
+Una de las cuestiones planteadas tras el análisis del modelo ATBCR sin limites consiste en determinar si, durante la expansión de las opiniones, permanecen agentes con valores  próximos al centro o si todas las opiniones terminan alejándose del intervalo inicial.
+
+Para responder a esta cuestión, se analizaron las opiniones finales y las distancias entre agentes en las ejecuciones Monte Carlo del escenario$(\epsilon,\theta)=(0.2,0.7)$, cuyos umbrales efectivos en el dominio transformado son$\epsilon'=0.4$ y $\theta'=1.4$.
+
+Se consideraron dos métricas, que son el minimo de la magnitud absoluta de las opiniones y la distancia mínima entre dos agentes distintos:
+
+Para la ejecución con semilla 7, en el paso $T=100000$,se obtuvieron los siguientes valores:
+
+\begin{equation}
+    m_{\min}(T)\approx 1.048483\times10^6,
+\end{equation}
+
+\begin{equation}
+    d_{\min}(T)\approx 2.072852\times10^3.
+\end{equation}
+
+
+Estos resultados indican que ningún agente permanece dentro del intervalo inicial $[-1,1]$ y que todas las parejas de agentes distintos superan el umbral de repulsión en el estado final.
+
+Se ha comprobado que las restantes semillas tiene el mismo comportamiento: ausencia de opiniones próximas al centro y separación suficiente entre agentes para que no puedan activarse interacciones de confianza en el estado final.
+
+La Figura~\ref{fig:exp03_opiniones} muestra la evolución temporal de las opiniones de una ejecución representativa mediante una escala logarítmica simétrica (\textit{symlog}).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]
+    {imagenes/experimento_3/opinions_e0p2_t0p7_seed7.png}
+
+    \caption{Evolución temporal de las opiniones en el ATBCR sin limites para $(\epsilon,\theta)=(0.2,0.7)$ y semilla 7.}
+
+    \label{fig:exp03_opiniones}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]
+    {imagenes/experimento_3/opinions_e0p2_t0p7_symlog_seed7.png}
+
+    \caption{Evolución temporal de las opiniones en el ATBCR sin limites para $(\epsilon,\theta)=(0.2,0.7)$ y semilla 7. Se utiliza una escala logarítmica simétrica para representar simultáneamente las opiniones negativas y positivas y visualizar su expansión a lo largo de diferentes órdenes de magnitud.}
+
+\end{figure}
+
+La representación permite observar cómo las opiniones se separan progresivamente hacia valores positivos y negativos de magnitudes crecientes.
+
+En una representación con escala lineal, las magnitudes alcanzadas al final de la simulación provocan que gran parte de las opiniones anteriores parezcan concentradas alrededor de cero. Sin embargo, la escala logarítmica simétrica permite visualizar con mayor claridad el proceso de separación.
+
+
+
+
+\subsection{Visualizacion de graficas de opiniones}
+
+
+\newcommand{\expSixFigure}[4]{%
+
+\begin{figure}[p]
+    \centering
+
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p2_t0p7_k_#2.png}
+        \caption{$(\epsilon,\theta)=(0.2,0.7)$,
+        $k=#2$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p2_t0p7_k_#3.png}
+        \caption{$(\epsilon,\theta)=(0.2,0.7)$,
+        $k=#3$.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p3_t0p8_k_#2.png}
+        \caption{$(\epsilon,\theta)=(0.3,0.8)$,
+        $k=#2$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p3_t0p8_k_#3.png}
+        \caption{$(\epsilon,\theta)=(0.3,0.8)$,
+        $k=#3$.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p4_t0p9_k_#2.png}
+        \caption{$(\epsilon,\theta)=(0.4,0.9)$,
+        $k=#2$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]%
+        {imagenes/graficas_evolutivas/#1/e0p4_t0p9_k_#3.png}
+        \caption{$(\epsilon,\theta)=(0.4,0.9)$,
+        $k=#3$.}
+    \end{subfigure}
+
+    \caption{Evolución individual de las opiniones con normalización \texttt{\detokenize{#1}} para frecuencias $k=#2$ y $k=#3$. Se muestran los tres escenarios de umbrales originales y la ejecución con misma semilla. Los umbrales efectivos son el doble de los indicados en cada panel. #4}
+
+    \label{fig:exp06_#1_k#2_k#3}
+
+\end{figure}
+
+}
+
+
+\subsection{Representaciones temporales de max\_abs}
+
+La Figura~\ref{fig:exp06_max_abs_k1_k3} permite comparar las diferentes normalizaciones mediante el máximo absoluto.
+
+\expSixFigure{max_abs}{1}{3}{Normalización aplicada con frecuencia elevada.}
+
+\expSixFigure{max_abs}{5}{7}{Comparación de dos frecuencias elevadas de normalización.}
+
+\expSixFigure{max_abs}{10}{100}{Comparación de frecuencias utilizadas en los experimentos anteriores.}
+
+\expSixFigure{max_abs}{1000}{10000}{Comparación de frecuencias de normalización más espaciadas.}
+
+\clearpage
+
+\subsection{Representaciones temporales de signed\_log\_max\_abs}
+
+Las siguientes figuras presentan la evolución temporal de las opiniones al aplicar la normalización logarítmica con signo.
+
+Se observan los mismos escenarios que en el caso anterior.
+
+\expSixFigure{signed_log_max_abs}{1}{3}{Normalización logarítmica aplicada con frecuencia elevada.}
+
+\expSixFigure{signed_log_max_abs}{5}{7}{Comparación de dos frecuencias elevadas de normalización logarítmica.}
+
+\expSixFigure{signed_log_max_abs}{10}{100}{Comparación de frecuencias utilizadas en los experimentos anteriores.}
+
+\expSixFigure{signed_log_max_abs}{1000}{10000}{Comparación de frecuencias de normalización logarítmica más espaciadas.}
+
+\clearpage
+
+
+\subsection{Experimento Escalado dinámico de los umbrales}
+
+\subsubsection{Objetivo}
+
+Los experimentos anteriores mostraron que la eliminación de los límites del dominio de opiniones provoca una expansión considerable de sus magnitudes y conduce,en las configuraciones analizadas, a un predominio progresivo de las interacciones de repulsión.
+
+Para evitar este comportamiento se estudiaron previamente dos estrategias de normalización:\texttt{max\_abs} y \texttt{signed\_log\_max\_abs}.
+
+Sin embargo, ambas estrategias modificaron sustancialmente la evolución del modelo respecto al caso acotado. La normalización por el máximo absoluto favoreció la concentración central,mientras que la normalización logarítmica produjo distribuciones predominantemente bimodales para frecuencias elevadas de normalización.
+
+El experimento permitió comprobar que aumentar la frecuencia de normalización hasta aplicarla en cada paso de simulación tampoco recuperaba satisfactoriamente la dinámica original.
+
+Por tanto, se plantea una estrategia alternativa que consiste en mantener las opiniones sin normalizar y modificar dinámicamente los umbrales que determinan la activación de las reglas de confianza, inacción y repulsión.
+
+El objetivo de este experimento es determinar si la adaptación de los umbrales a la magnitud de las opiniones permite mantener activas las reglas de interacción sin alterar directamente las opiniones de los agentes.
+
+Asimismo, se estudia si esta estrategia permite obtener distribuciones semejantes a las observadas en el modelo ATBCR acotado.
+
+\subsubsection{Definición del escalado dinámico}
+
+A diferencia de las normalizaciones anteriores,en este experimento las opiniones no se reescalan después de las interacciones.
+En su lugar, los umbrales de confianza y repulsión se adaptan utilizando la máxima magnitud absoluta de las opiniones.
+
+Se define la máxima opinión absoluta como:
+
+\begin{equation}
+    M(t)=\max_{1\leq i\leq N}|x_i(t)|.
+\end{equation}
+
+A partir de esta opinión se calcula un factor de escala al estado inicial:
+
+\begin{equation}
+    s(t)=\frac{M(t)}{M(0)}.
+\end{equation}
+
+Los umbrales dinámicos se obtienen mediante:
+
+\begin{equation}
+    \epsilon(t)=\epsilon_0 s(t),
+    \label{eq:exp07_epsilon}
+\end{equation}
+
+\begin{equation}
+    \theta(t)=\theta_0 s(t),
+    \label{eq:exp07_theta}
+\end{equation}
+
+donde $\epsilon_0$ y $\theta_0$ representan los umbrales efectivos iniciales en el dominio$[-1,1]$.
+
+En el caso $M(0)=0$, se conserva el valor inicial de los umbrales para evitar una división por cero.
+El escalado mantiene constante la proporción entre ambos umbrales:
+
+
+\subsubsection{Configuración experimental}
+
+Se mantienen las condiciones generales de los experimentos anteriores:
+
+\begin{itemize}
+
+    \item Número de agentes: $N=1000$.
+    \item Pasos de simulación: $T=100000$.
+    \item Parámetro de actualización: $\mu=0.1$.
+    \item Opiniones iniciales distribuidas uniformemente en $[-1,1]$.
+    \item Topología de interacción completa.
+    \item Limites desactivado.
+    \item No se realiza normalizaciones de opiniones.
+    \item Umbrales de interacción dinámicos.
+
+\end{itemize}
+
+Se seleccionan tres configuraciones representativas de los umbrales originales (0.2,0.7),(0.3,0.8),(0.4,0.9), que se transforman al dominio $[-1,1]$ para obtener los umbrales efectivos iniciales: (0.4,1.4),(0.6,1.6),(0.8,1.8).
+
+Se estudia la influencia de la frecuencia de actualización de los umbrales.
+
+Para ello, se consideran k = (1, 10, 100, 1000, 10000) pasos entre actualizaciones consecutivas, el parámetro $k$ indica cada cuántos pasos se recalculan los umbrales.
+
+
+\subsubsection{Evolución de las interacciones de confianza}
+
+La Figura~\ref{fig:exp07_confidence}muestra la evolución de la frecuencia de confianza.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{imagenes/experimento_6/confidence_compare.png}
+    \caption{Evolución temporal de la frecuencia de confianza con umbrales dinámicos para las tres configuraciones de parámetros y distintas frecuencias de actualización.}
+    \label{fig:exp07_confidence}
+\end{figure}
+
+Los resultados muestran un aumento progresivo de la frecuencia de confianza durante la evolución del sistema, en la mayor parte de las configuraciones,esta frecuencia alcanza valores próximos al $100\%$ durante las etapas finales.
+
+El comportamiento contrasta con el observado en el experimento, donde la eliminación del limite sin adaptación de los umbrales conducía a la desaparición de las interacciones de confianza.
+
+En el presente experimento, el crecimiento de los umbrales permite que distancias que anteriormente quedarían fuera de la región de confianza puedan satisfacer la condición de atracción.
+
+Por tanto, el escalado dinámico evita la desaparición de la confianza observada en el caso sin normalización.
+
+\subsubsection{Evolución de las interacciones de repulsión}
+
+La Figura~\ref{fig:exp07_repulsion} representa la evolución temporal de la frecuencia de repulsión.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{imagenes/experimento_6/repulsion_compare.png}
+    \caption{Evolución temporal de la frecuencia de repulsión para distintas configuraciones de umbrales dinámicos y frecuencias de actualización.}
+    \label{fig:exp07_repulsion}
+\end{figure}
+
+A diferencia del experimento sin limite y sin normalizacion,la repulsión no termina dominando el sistema.
+
+En determinadas configuraciones se observa una etapa inicial en la que la frecuencia de repulsión aumenta de forma considerable, este comportamiento es especialmente visible cuando las actualizaciones de los umbrales se encuentran más espaciadas.
+
+Sin embargo, despues la frecuencia de repulsión disminuye hasta alcanzar valores prácticamente nulos en las etapas finales de las simulaciones.
+
+Esto indica que la adaptación de los umbrales modifica sustancialmente el equilibrio entre las reglas de interacción.
+
+En lugar de mantener valores de confianza y repulsión,el sistema evoluciona hacia un dominio casi exclusivamente por la confianza.
+
+\subsubsection{Evolución del máximo absoluto}
+
+La Figura~\ref{fig:exp07_max_abs} muestra la evolución de la mayor magnitud absoluta de opinión.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{imagenes/experimento_6/max_compare.png}
+    \caption{Evolución temporal de la máxima magnitud absoluta de las opiniones para diferentes configuraciones y frecuencias de actualización de los umbrales dinámicos.}
+    \label{fig:exp07_max_abs}
+\end{figure}
+
+Los resultados muestran que la magnitud máxima depende tanto de los parámetros del modelo como de la frecuencia de actualización de los umbrales.
+
+En numerosas configuraciones,el máximo absoluto aumenta inicialmente y posteriormente se presenta variaciones reducidas durante gran parte de la simulación.
+
+Este comportamiento evidencia que adaptar los umbrales no garantiza que las opiniones permanezcan dentro del intervalo inicial $[-1,1]$, pero tampoco se va a valores grandes.
+
+\subsubsection{Evolución de la desviación típica}
+
+La Figura~\ref{fig:exp07_std} muestra la evolución de la desviación típica de las opiniones.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{imagenes/experimento_6/std_compare.png}
+    \caption{Evolución temporal de la desviación típica de las opiniones para diferentes configuraciones de umbrales dinámicos y frecuencias de actualización.}
+    \label{fig:exp07_std}
+\end{figure}
+
+En la mayoría de las configuraciones,la desviación típica disminuye progresivamente durante las primeras etapas de simulación, esto refleja una concentración creciente de las opiniones.
+
+Sin embargo, las configuraciones con mayores magnitudes extremas presentan una dispersión superior.
+
+Esta comparación con el máximo absoluto permite distinguir dos fenómenos, por un lado, una concentración mayoritaria de las opiniones alrededor de la región central y por otro, la persistencia de algunos agentes con opiniones alejadas del grupo principal.
+
+\subsubsection{Evolución individual de las opiniones}
+
+Para comprender la estructura temporal, se representa la evolución individual de las opiniones para tres configuraciones de parámetros y tres frecuencias de actualización:
+
+\begin{equation}
+    k\in\{1,10,1000\}.
+\end{equation}
+
+En todos los casos se utiliza la misma semilla de ejecución.
+
+
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p2_t0p7_seed7_every_1.png}
+        \caption{Actualización cada $k=1$ pasos.}
+    \end{subfigure}
+    \medskip
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p2_t0p7_seed7_every_10.png}
+        \caption{Actualización cada $k=10$ pasos.}
+    \end{subfigure}
+    \medskip
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p2_t0p7_seed7_every_1000.png}
+        \caption{Actualización cada $k=1000$ pasos.}
+    \end{subfigure}
+    \caption{Evolución individual de las opiniones con umbrales dinámicos para $(\epsilon,\theta)=(0.2,0.7)$ y semilla 7. Comparación entre tres frecuencias de actualización.}
+    \label{fig:exp07_opinions_02_07}
+\end{figure}
+
+La Figura~\ref{fig:exp07_opinions_02_07} muestra una concentración progresiva de la mayor parte de las opiniones alrededor de cero. Tras una etapa inicial con dispersión, el conjunto principal de agentes se contrae progresivamente. No obstante, también se observan trayectorias que permanecen alejadas de la concentración central hasta el final de la simulación.
+
+
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p3_t0p8_seed7_every_1.png}
+        \caption{Actualización cada $k=1$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p3_t0p8_seed7_every_10.png}
+        \caption{Actualización cada $k=10$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p3_t0p8_seed7_every_1000.png}
+        \caption{Actualización cada $k=1000$ pasos.}
+    \end{subfigure}
+
+    \caption{Evolución individual de las opiniones con umbrales dinámicos para $(\epsilon,\theta)=(0.3,0.8)$ y semilla 7.}
+
+    \label{fig:exp07_opinions_03_08}
+\end{figure}
+
+Para $(\epsilon,\theta)=(0.3,0.8)$ se observa igualmente una reducción progresiva de la dispersión del grupo principal de opiniones. La mayor parte de los agentes termina concentrándose cerca de la región central. Sin embargo, determinadas trayectorias permanecen separadas del conjunto principal.
+
+
+\begin{figure}[p]
+    \centering
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p4_t0p9_seed7_every_1.png}
+        \caption{Actualización cada $k=1$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p4_t0p9_seed7_every_10.png}
+        \caption{Actualización cada $k=10$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/opinions_e0p4_t0p9_seed7_every_1000.png}
+        \caption{Actualización cada $k=1000$ pasos.}
+    \end{subfigure}
+
+    \caption{Evolución individual de las opiniones con umbrales dinámicos para $(\epsilon,\theta)=(0.4,0.9)$ y semilla 7.}
+
+    \label{fig:exp07_opinions_04_09}
+\end{figure}
+
+En la configuración $(0.4,0.9)$ también aparece una concentración progresiva de la mayoría de las opiniones hacia el centro. En determinadas frecuencias de actualización permanecen varios agentes con opiniones claramente diferenciadas. Las diferencias entre las tres frecuencias son visibles en la cantidad y posición de estas opiniones.
+
+
+\clearpage
+
+\subsubsection{Distribuciones finales de las opiniones}
+\label{subsec:exp07_distribuciones}
+
+Se representan las distribuciones finales de opiniones correspondientes a distintas frecuencias de actualización.
+
+
+\begin{figure}[htbp]
+    \centering
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/final_distribution_every_1.png}
+        \caption{Actualización cada $k=1$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/final_distribution_every_10.png}
+        \caption{Actualización cada $k=10$ pasos.}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}[t]{0.95\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_6/final_distribution_every_1000.png}
+        \caption{Actualización cada $k=1000$ pasos.}
+    \end{subfigure}
+
+    \caption{Distribuciones finales de las opiniones para $(\epsilon,\theta)=(0.2,0.7)$ con diferentes frecuencias de actualización de los umbrales dinámicos. Los histogramas representan las opiniones finales agregadas de las ejecuciones incluidas en cada configuración.}
+
+    \label{fig:exp07_final_distributions}
+\end{figure}
+
+En las tres representaciones se observa un pico de densidad muy pronunciado en la región central. Este resultado confirma que la mayor parte de las opiniones finales se concentra cerca de cero.
+
+\subsubsection{Discusión de los resultados}
+
+Los resultados muestran que el escalado dinámico de los umbrales modifica el régimen de interacción del modelo ATBCR.
+
+En el experimento sin normalizacion y sin limites, la eliminación de los limites sin adaptación de los umbrales conducía a una expansión de las opiniones y al predominio de las interacciones de repulsión.
+
+Por el contrario, en el presente experimento la confianza pasa a ser la regla dominante.
+
+Este comportamiento puede explicarse por el aumento de los umbrales de interacción cuando crece la máxima magnitud absoluta de las opiniones.
+
+En particular, una opinión muy extrema puede aumentar la escala global del sistema y provocar que el umbral de confianza sea elevado para gran parte de la población.
+
+El escalado de los umbrales permite recuperar las interacciones de confianza, pero lo hace modificando el equilibrio entre confianza y repulsión.
+
+Por tanto, esta estrategia no reproduce satisfactoriamente la dinámica del modelo ATBCR acotado en los escenarios estudiados.
+
+\subsubsection{Comparación con las estrategias anteriores}
+
+La Tabla~\ref{tab:exp07_comparacion} resume los comportamientos observados en los experimentos anteriores y en el presente análisis.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparación cualitativa de las estrategias estudiadas para modificar o controlar la dinámica del ATBCR.}
+    \label{tab:exp07_comparacion}
+    \small
+
+    \begin{tabular}{p{2.2cm}p{4.2cm}p{5.1cm}}
+    \hline
+    \textbf{Estrategia}
+    &
+    \textbf{Comportamiento predominante}
+    \\
+    Sin dominio ni normalización.
+    &
+    Expansión pronunciada de las opiniones
+    y predominio final de la repulsión.
+    \\
+
+    Normalización \texttt{max\_abs}.
+    &
+    Concentración central predominante.
+    \\
+
+    Normalización \texttt{signed\_log\_max\_abs}.
+    &
+    Estructura bimodal para
+    normalizaciones frecuentes.
+    \\
+
+
+    Umbrales dinámicos sin normalización de opiniones.
+    &
+    Predominio de la confianza, concentración central y persistencia de algunas opiniones periféricas.
+    \\
+
+    \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{Conclusiones del experimento}
+\label{subsec:exp07_conclusiones}
+
+En conclusión, el uso de umbrales dinámicos evita el predominio generalizado de la repulsión, pero desplaza la dinámica hacia un régimen dominado por la confianza.
+
+Los resultados muestran que tanto la normalización directa de las opiniones como la adaptación global de los umbrales pueden alterar el equilibrio entre atracción y repulsión.
 
 
 \end{document}

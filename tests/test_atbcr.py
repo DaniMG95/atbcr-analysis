@@ -274,6 +274,27 @@ class SimulationTests(unittest.TestCase):
             self.assertEqual(event.scale, event.max_abs_before)
             self.assertAlmostEqual(event.max_abs_after, 1.0)
 
+    def test_normalization_events_can_be_disabled(self) -> None:
+        config = SimulationConfig(
+            name="normalization-without-events",
+            model=ATBCRModelConfig(epsilon=0.2, theta=0.7, mu=0.1),
+            graph=CompleteGraphConfig(n_agents=10),
+            variant="unbounded",
+            domain="unbounded",
+            steps=4,
+            metrics=MetricsConfig(
+                record_every=2,
+                store_normalization_events=False,
+            ),
+            opinion_initializer=UniformOpinionInitializerConfig(low=-2.0, high=2.0),
+            normalization=NormalizationConfig(kind="max_abs", every=1),
+        )
+
+        result = simulate_atbcr(config, seed=9)
+
+        self.assertEqual(result.normalization_events, ())
+        self.assertAlmostEqual(max(abs(opinion) for opinion in result.final_opinions), 1.0)
+
     def test_active_normalizer_requires_positive_interval(self) -> None:
         with self.assertRaises(ValueError):
             NormalizationConfig(kind="max_abs")
@@ -979,6 +1000,28 @@ class PlotCliTests(unittest.TestCase):
         finally:
             plt.close(figure)
 
+    def test_final_opinions_can_be_filtered_by_run_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshots_path = Path(temporary_directory) / "snapshots.csv"
+            snapshots_path.write_text(
+                "scenario,variant,normalizer,normalization_every,run_seed,step,agent,opinion\n"
+                "e0p2_t0p7,unbounded,none,,1,0,0,0.0\n"
+                "e0p2_t0p7,unbounded,none,,1,10,0,0.8\n"
+                "e0p2_t0p7,unbounded,none,,2,0,0,0.0\n"
+                "e0p2_t0p7,unbounded,none,,2,10,0,-0.6\n",
+                encoding="utf-8",
+            )
+
+            opinions = plots._final_opinions_for_parameter_pairs(
+                snapshots_path,
+                parameter_pairs=[(0.2, 0.7)],
+                variant="unbounded",
+                normalizer="none",
+                run_seed="2",
+            )
+
+        self.assertEqual(opinions[(0.2, 0.7)], [-0.6])
+
     def test_parameter_distribution_range_follows_variant_domain(self) -> None:
         from atbcr_analysis.plots import plots as plots_module
 
@@ -1203,6 +1246,98 @@ class PlotCliTests(unittest.TestCase):
             "rango [-1.0, 1.0]; max_abs every 100; seed 7",
         )
 
+    def test_opinion_trajectories_only_keep_the_matching_series(self) -> None:
+        from atbcr_analysis.plots import plots as plots_module
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshots_path = Path(temporary_directory) / "snapshots.csv"
+            snapshots_path.write_text(
+                "scenario,variant,normalizer,normalization_every,run_seed,step,agent,opinion\n"
+                "e0p2_t0p7,unbounded,max_abs,1,8,0,0,8.0\n"
+                "e0p2_t0p7,unbounded,max_abs,1,7,0,2,2.0\n"
+                "e0p2_t0p7,unbounded,max_abs,1,7,0,0,0.0\n"
+                "e0p2_t0p7,unbounded,max_abs,1,7,10,0,0.5\n"
+                "e0p2_t0p7,unbounded,max_abs,1,7,10,2,2.5\n",
+                encoding="utf-8",
+            )
+
+            selected, trajectories = plots_module._read_opinion_trajectories(
+                snapshots_path,
+                scenario="e0p2_t0p7",
+                variant="unbounded",
+                normalizer="max_abs",
+                normalization_every="1",
+                run_seed="7",
+                max_agents=1,
+            )
+
+        self.assertEqual(
+            selected,
+            plots.SnapshotSeries("e0p2_t0p7", "unbounded", "max_abs", "1", "7"),
+        )
+        self.assertEqual(trajectories, {0: [(0, 0.0), (10, 0.5)]})
+
+    def test_opinion_plot_labels_updates_and_adds_final_distribution(self) -> None:
+        import matplotlib.pyplot as plt
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshots_path = root / "snapshots.csv"
+            output_path = root / "opinions.png"
+            snapshots_path.write_text(
+                "scenario,variant,normalizer,normalization_every,run_seed,step,agent,opinion\n"
+                "e0p2_t0p7,unbounded,none,,7,0,0,-1.0\n"
+                "e0p2_t0p7,unbounded,none,,7,10,0,-0.5\n"
+                "e0p2_t0p7,unbounded,none,,7,0,1,1.0\n"
+                "e0p2_t0p7,unbounded,none,,7,10,1,0.5\n",
+                encoding="utf-8",
+            )
+
+            with patch("matplotlib.pyplot.close") as close_plot:
+                plots.plot_opinion_trajectories(
+                    snapshots_path,
+                    output_path,
+                    scenario="e0p2_t0p7",
+                    variant="unbounded",
+                    normalizer="none",
+                    normalization_every="",
+                    run_seed="7",
+                    yscale="symlog",
+                    symlog_linthresh=0.1,
+                )
+
+            figure = close_plot.call_args.args[0]
+            try:
+                main_axis, distribution_axis = figure.axes
+                legend_labels = {
+                    text.get_text() for text in main_axis.get_legend().get_texts()
+                }
+                self.assertEqual(
+                    legend_labels,
+                    {"initial opinions", "final opinions", "updated opinions"},
+                )
+                self.assertEqual(distribution_axis.get_ylabel(), "final distribution")
+                self.assertEqual(main_axis.get_yscale(), "symlog")
+                self.assertEqual(distribution_axis.get_yscale(), "symlog")
+                self.assertEqual(
+                    [label.get_text() for label in distribution_axis.get_xticklabels()],
+                    ["0%", "100%"],
+                )
+                self.assertGreater(len(distribution_axis.patches), 0)
+                transform = distribution_axis.yaxis.get_transform()
+                transformed_heights = [
+                    transform.transform(patch.get_y() + patch.get_height())
+                    - transform.transform(patch.get_y())
+                    for patch in distribution_axis.patches
+                ]
+                self.assertAlmostEqual(
+                    max(transformed_heights),
+                    min(transformed_heights),
+                )
+                self.assertTrue(output_path.exists())
+            finally:
+                plt.close(figure)
+
     def test_metric_command_delegates_to_metric_plotter(self) -> None:
         with patch(
             "atbcr_analysis.plots.plot_cli.plot_metric_trajectories",
@@ -1324,6 +1459,10 @@ class PlotCliTests(unittest.TestCase):
                     "7",
                     "--max-agents",
                     "25",
+                    "--yscale",
+                    "symlog",
+                    "--symlog-linthresh",
+                    "0.5",
                     "--output",
                     "runs/reference/opinions.png",
                 ],
@@ -1339,6 +1478,44 @@ class PlotCliTests(unittest.TestCase):
             normalization_every="100",
             run_seed="7",
             max_agents=25,
+            yscale="symlog",
+            symlog_linthresh=0.5,
+        )
+
+    def test_parameter_distribution_command_accepts_run_seed(self) -> None:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_final_opinion_histogram",
+        ) as plot_distribution:
+            exit_code = plot_cli.main(
+                [
+                    "parameter-distribution",
+                    "runs/reference/snapshots.csv",
+                    "--pair",
+                    "0.2",
+                    "0.7",
+                    "--variant",
+                    "unbounded",
+                    "--normalizer",
+                    "none",
+                    "--run-seed",
+                    "7",
+                    "--bins",
+                    "25",
+                    "--output",
+                    "runs/reference/seed_7.png",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        plot_distribution.assert_called_once_with(
+            Path("runs/reference/snapshots.csv"),
+            Path("runs/reference/seed_7.png"),
+            parameter_pairs=[(0.2, 0.7)],
+            variant="unbounded",
+            normalizer="none",
+            normalization_every=None,
+            run_seed="7",
+            bins=25,
         )
 
 

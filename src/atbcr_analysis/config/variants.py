@@ -20,7 +20,9 @@ class VariantConfig(BaseModel):
 
     name: str = Field(min_length=1)
     domain: Literal["bounded_01", "bounded_m11", "unbounded"]
-    threshold_scale: float = Field(default=1.0, gt=0)
+    threshold_scale: float = Field(default=1.0, gt=0, allow_inf_nan=False)
+    threshold_mode: Literal["fixed", "max_abs"] = "fixed"
+    threshold_update_every: int = Field(default=1, ge=1)
     initializer: OpinionInitializerConfig = UniformOpinionInitializerConfig()
     normalizations: tuple[NormalizationConfig, ...] = (NormalizationConfig(),)
 

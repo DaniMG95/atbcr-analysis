@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from atbcr_analysis.persistence import reduce_snapshots_csv
 from atbcr_analysis.plots import (
+    calculate_snapshot_opinion_metrics,
     plot_comparative_trajectories,
     plot_extremized_share_heatmap,
     plot_extremized_share_trajectory,
@@ -14,6 +16,8 @@ from atbcr_analysis.plots import (
     plot_final_opinion_histogram,
     plot_metric_trajectories,
     plot_opinion_trajectories,
+    plot_snapshot_stability,
+    write_snapshot_opinion_metrics_csv,
 )
 
 
@@ -69,7 +73,19 @@ def main(argv: list[str] | None = None) -> int:
     opinions.add_argument("--normalization-every")
     opinions.add_argument("--run-seed")
     opinions.add_argument("--max-agents", type=int)
+    opinions.add_argument("--yscale", choices=("linear", "symlog"), default="linear")
+    opinions.add_argument("--symlog-linthresh", type=float, default=1.0)
     opinions.add_argument("--output", type=Path, required=True)
+
+    opinion_metrics = subparsers.add_parser(
+        "opinion-metrics",
+        aliases=["snapshot-metrics"],
+        help="derive metrics from final opinions or temporal snapshots",
+    )
+    opinion_metrics.add_argument("opinions_csv", type=Path)
+    _add_parameter_arguments(opinion_metrics)
+    opinion_metrics.add_argument("--run-seed")
+    opinion_metrics.add_argument("--output", type=Path, required=True)
 
     heatmap = subparsers.add_parser("extremized-heatmap")
     heatmap.add_argument("summary_csv", type=Path)
@@ -82,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     parameter_distribution.add_argument("snapshots_csv", type=Path)
     _add_parameter_arguments(parameter_distribution, required=False)
     _add_pair_argument(parameter_distribution)
+    parameter_distribution.add_argument(
+        "--run-seed",
+        help="restrict final opinions to one Monte Carlo run seed",
+    )
     parameter_distribution.add_argument("--bins", type=int, default=50)
     parameter_distribution.add_argument("--output", type=Path, required=True)
 
@@ -90,6 +110,30 @@ def main(argv: list[str] | None = None) -> int:
     _add_parameter_arguments(extremized_trajectory, required=False)
     _add_pair_argument(extremized_trajectory)
     extremized_trajectory.add_argument("--output", type=Path, required=True)
+
+    stability = subparsers.add_parser(
+        "stability",
+        help="plot maximum opinion changes between consecutive stored snapshots",
+    )
+    stability.add_argument("--input", type=Path, nargs="+", required=True)
+    stability.add_argument("--scenarios", nargs="+")
+    stability.add_argument("--variants", nargs="+")
+    stability.add_argument("--normalizers", nargs="+")
+    stability.add_argument("--normalization-every", nargs="+")
+    stability.add_argument("--run-seed")
+    stability.add_argument("--chunk-size", type=int, default=10_000)
+    stability.add_argument(
+        "--cache",
+        type=Path,
+        help="compact derived CSV to create or reuse when inputs and filters match",
+    )
+    stability.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="rebuild the compact stability CSV even when its metadata matches",
+    )
+    stability.add_argument("--no-progress", action="store_true")
+    stability.add_argument("--output", type=Path, required=True)
 
     args = parser.parse_args(argv)
     if args.command == "metric":
@@ -130,7 +174,20 @@ def main(argv: list[str] | None = None) -> int:
             normalization_every=args.normalization_every,
             run_seed=args.run_seed,
             max_agents=args.max_agents,
+            yscale=args.yscale,
+            symlog_linthresh=args.symlog_linthresh,
         )
+    elif args.command in {"opinion-metrics", "snapshot-metrics"}:
+        metrics = calculate_snapshot_opinion_metrics(
+            args.opinions_csv,
+            epsilon=args.epsilon,
+            theta=args.theta,
+            variant=args.variant,
+            normalizer=args.normalizer,
+            normalization_every=args.normalization_every,
+            run_seed=args.run_seed,
+        )
+        write_snapshot_opinion_metrics_csv(args.output, metrics)
     elif args.command == "extremized-heatmap":
         plot_extremized_share_heatmap(
             args.summary_csv,
@@ -148,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             variant=args.variant,
             normalizer=args.normalizer,
             normalization_every=args.normalization_every,
+            run_seed=args.run_seed,
             bins=args.bins,
         )
     elif args.command == "extremized-trajectory":
@@ -159,6 +217,24 @@ def main(argv: list[str] | None = None) -> int:
             variant=args.variant,
             normalizer=args.normalizer,
             normalization_every=args.normalization_every,
+        )
+    elif args.command == "stability":
+        if args.refresh_cache and args.cache is None:
+            parser.error("--refresh-cache requires --cache")
+        reporter = _StabilityProgressReporter(enabled=not args.no_progress)
+        plot_snapshot_stability(
+            args.input,
+            args.output,
+            scenarios=args.scenarios,
+            variants=args.variants,
+            normalizers=args.normalizers,
+            normalization_every=args.normalization_every,
+            run_seed=args.run_seed,
+            chunk_size=args.chunk_size,
+            cache_path=args.cache,
+            refresh_cache=args.refresh_cache,
+            progress=reporter.progress if reporter.enabled else None,
+            status=reporter.status,
         )
     return 0
 
@@ -199,6 +275,33 @@ def _comparison_parameter_pairs(
     if not pairs:
         parser.error("provide --epsilon/--theta or at least one --pair")
     return pairs
+
+
+class _StabilityProgressReporter:
+    def __init__(self, *, enabled: bool) -> None:
+        self.enabled = enabled
+        self._last_percent_by_path: dict[Path, int] = {}
+        self._active = False
+
+    def progress(self, path: Path, processed: int, total: int) -> None:
+        percent = 100 if total == 0 else min(100, int(processed * 100 / total))
+        if self._last_percent_by_path.get(path) == percent:
+            return
+        self._last_percent_by_path[path] = percent
+        processed_gib = processed / 1024**3
+        total_gib = total / 1024**3
+        message = (
+            f"Leyendo {path}: {percent:3d}% "
+            f"({processed_gib:.2f}/{total_gib:.2f} GiB)"
+        )
+        print(f"\r{message:<100}", end="", file=sys.stderr, flush=True)
+        self._active = True
+
+    def status(self, message: str) -> None:
+        if self._active:
+            print(file=sys.stderr)
+            self._active = False
+        print(message, file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

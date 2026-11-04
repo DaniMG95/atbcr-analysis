@@ -99,6 +99,8 @@ class SimulationRunner:
             raise ValueError("graph has no edges; choose a denser graph configuration")
 
         opinions = initializer.initialize(self.config.graph.n_agents, opinion_rng)
+        if hasattr(model, "initialize"):
+            model.initialize(opinions)
         counts = RuleCounts()
         normalizer = self.config.normalization.build()
         trajectory: list[OpinionSnapshot] = []
@@ -138,8 +140,11 @@ class SimulationRunner:
             else:
                 counts.add(model.step(opinions, adjacency, edges, dynamics_rng))
             if self.config.normalization.should_apply(step):
-                event, opinions = _normalize_with_event(step, normalizer, opinions)
-                normalization_events.append(event)
+                if self.config.metrics.store_normalization_events:
+                    event, opinions = _normalize_with_event(step, normalizer, opinions)
+                    normalization_events.append(event)
+                else:
+                    opinions = normalizer.normalize(opinions)
             if step % self.config.metrics.record_every == 0 or step == self.config.steps:
                 window_counts = counts.difference(last_snapshot_counts)
                 _append_snapshot(

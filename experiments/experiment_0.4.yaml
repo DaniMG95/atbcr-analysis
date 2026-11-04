@@ -60,6 +60,7 @@ experiments:
     metrics:
       record_every: 1000
       store_opinion_snapshots: true
+      store_normalization_events: false
       unbounded_extreme_cutoff: 1.0
     monte_carlo:
       runs: 100

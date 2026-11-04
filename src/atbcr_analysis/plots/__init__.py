@@ -26,6 +26,21 @@ from atbcr_analysis.plots.plots import (
     plot_metric_trajectories,
     plot_opinion_trajectories,
 )
+from atbcr_analysis.plots.stability import (
+    SnapshotInterval,
+    StabilityPoint,
+    StabilitySeries,
+    aggregate_snapshot_stability,
+    plot_snapshot_stability,
+    read_snapshot_stability,
+    read_snapshot_stability_csv,
+    write_snapshot_stability_csv,
+)
+from atbcr_analysis.plots.snapshot_metrics import (
+    SnapshotOpinionMetrics,
+    calculate_snapshot_opinion_metrics,
+    write_snapshot_opinion_metrics_csv,
+)
 
 __all__ = [
     "AggregatePoint",
@@ -33,7 +48,13 @@ __all__ = [
     "ExtremizedShareGrid",
     "LinearFit",
     "SnapshotSeries",
+    "SnapshotInterval",
+    "SnapshotOpinionMetrics",
+    "StabilityPoint",
+    "StabilitySeries",
     "aggregate_trajectories",
+    "aggregate_snapshot_stability",
+    "calculate_snapshot_opinion_metrics",
     "fit_replica_trajectories",
     "plot_comparative_trajectories",
     "plot_extremized_share_heatmap",
@@ -42,6 +63,11 @@ __all__ = [
     "plot_final_opinion_histogram",
     "plot_metric_trajectories",
     "plot_opinion_trajectories",
+    "plot_snapshot_stability",
     "read_comparative_trajectories",
+    "read_snapshot_stability",
+    "read_snapshot_stability_csv",
     "write_linear_fits_csv",
+    "write_snapshot_opinion_metrics_csv",
+    "write_snapshot_stability_csv",
 ]
