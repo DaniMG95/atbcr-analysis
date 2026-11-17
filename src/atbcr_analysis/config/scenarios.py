@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from atbcr_analysis.config.models import ATBCRModelConfig
+from atbcr_analysis.config.models import ATBCRModelConfig, ATBCRShiftModelConfig
 
 
 class ScenarioParametersConfig(BaseModel):
@@ -36,6 +37,37 @@ class ScenarioConfig(ScenarioParametersConfig):
         """ATBCR model configuration derived from the scenario parameters."""
 
         return ATBCRModelConfig(epsilon=self.epsilon, theta=self.theta, mu=self.mu)
+
+
+class ATBCRShiftScenarioParametersConfig(ScenarioParametersConfig):
+    """Parameters belonging exclusively to an ``atbcr_shift`` scenario."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    model_name: Literal["atbcr_shift"] = Field(alias="model")
+    p: float = Field(ge=0, le=1, allow_inf_nan=False)
+    shift_lambda: float = Field(ge=-1, le=1, allow_inf_nan=False)
+
+
+class ATBCRShiftScenarioConfig(ATBCRShiftScenarioParametersConfig):
+    """Named scenario selecting the independent ATBCR-shift model."""
+
+    name: str = Field(min_length=1)
+
+    @computed_field
+    @property
+    def model(self) -> ATBCRShiftModelConfig:
+        return ATBCRShiftModelConfig(
+            epsilon=self.epsilon,
+            theta=self.theta,
+            mu=self.mu,
+            p=self.p,
+            shift_lambda=self.shift_lambda,
+        )
+
+
+ScenarioParametersType = ATBCRShiftScenarioParametersConfig | ScenarioParametersConfig
+ScenarioType = ATBCRShiftScenarioConfig | ScenarioConfig
 
 
 class DecimalRangeConfig(BaseModel):

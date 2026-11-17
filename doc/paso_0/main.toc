@@ -43,8 +43,21 @@
 \contentsline {subsection}{\numberline {7.3}Efecto de la normalización lineal}{18}{subsection.7.3}%
 \contentsline {subsection}{\numberline {7.4}Efecto de la normalización logarítmica}{19}{subsection.7.4}%
 \contentsline {subsection}{\numberline {7.5}Conclusión final}{19}{subsection.7.5}%
-\contentsline {subsection}{\numberline {7.6}Resolución de dudas: persistencia de opiniones centrales}{19}{subsection.7.6}%
-\contentsline {subsection}{\numberline {7.7}Persistencia de opiniones centrales}{19}{subsection.7.7}%
-\contentsline {subsection}{\numberline {7.8}Visualizacion de graficas de opiniones}{21}{subsection.7.8}%
-\contentsline {subsection}{\numberline {7.9}Representaciones temporales de max\_abs}{21}{subsection.7.9}%
-\contentsline {subsection}{\numberline {7.10}Representaciones temporales de signed\_log\_max\_abs}{26}{subsection.7.10}%
+\contentsline {section}{\numberline {8}Resolución de dudas: persistencia de opiniones centrales}{19}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Persistencia de opiniones centrales}{19}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Visualizacion de graficas de opiniones}{21}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Representaciones temporales de max\_abs}{21}{subsection.8.3}%
+\contentsline {subsection}{\numberline {8.4}Representaciones temporales de signed\_log\_max\_abs}{26}{subsection.8.4}%
+\contentsline {subsection}{\numberline {8.5}Experimento Escalado dinámico de los umbrales}{31}{subsection.8.5}%
+\contentsline {subsubsection}{\numberline {8.5.1}Objetivo}{31}{subsubsection.8.5.1}%
+\contentsline {subsubsection}{\numberline {8.5.2}Definición del escalado dinámico}{31}{subsubsection.8.5.2}%
+\contentsline {subsubsection}{\numberline {8.5.3}Configuración experimental}{31}{subsubsection.8.5.3}%
+\contentsline {subsubsection}{\numberline {8.5.4}Evolución de las interacciones de confianza}{32}{subsubsection.8.5.4}%
+\contentsline {subsubsection}{\numberline {8.5.5}Evolución de las interacciones de repulsión}{33}{subsubsection.8.5.5}%
+\contentsline {subsubsection}{\numberline {8.5.6}Evolución del máximo absoluto}{33}{subsubsection.8.5.6}%
+\contentsline {subsubsection}{\numberline {8.5.7}Evolución de la desviación típica}{33}{subsubsection.8.5.7}%
+\contentsline {subsubsection}{\numberline {8.5.8}Evolución individual de las opiniones}{35}{subsubsection.8.5.8}%
+\contentsline {subsubsection}{\numberline {8.5.9}Distribuciones finales de las opiniones}{39}{subsubsection.8.5.9}%
+\contentsline {subsubsection}{\numberline {8.5.10}Discusión de los resultados}{39}{subsubsection.8.5.10}%
+\contentsline {subsubsection}{\numberline {8.5.11}Comparación con las estrategias anteriores}{40}{subsubsection.8.5.11}%
+\contentsline {subsubsection}{\numberline {8.5.12}Conclusiones del experimento}{40}{subsubsection.8.5.12}%

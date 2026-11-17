@@ -9,7 +9,7 @@ from typing import Literal, Protocol
 
 from atbcr_analysis.graphs import Adjacency, Edge
 
-InteractionOutcome = Literal["confidence", "inaction", "repulsion"]
+InteractionOutcome = Literal["confidence", "inaction", "repulsion", "shift"]
 
 
 @dataclass(frozen=True, slots=True)

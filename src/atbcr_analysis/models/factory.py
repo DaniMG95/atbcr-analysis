@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from atbcr_analysis.config import ATBCRModelConfig, ModelConfig
+from atbcr_analysis.config import ATBCRModelConfig, ATBCRShiftModelConfig, ModelConfig
 from atbcr_analysis.models.atbcr import ATBCRModel
+from atbcr_analysis.models.atbcr_shift import ATBCRShiftModel
 from atbcr_analysis.models.base import OpinionDynamicsModel
 
 ModelBuilder = Callable[[ModelConfig, str], OpinionDynamicsModel]
@@ -61,8 +62,18 @@ def _build_atbcr_model(
     return ATBCRModel(config=model_config, domain=domain)
 
 
+def _build_atbcr_shift_model(
+    model_config: ModelConfig,
+    domain: str,
+) -> OpinionDynamicsModel:
+    if not isinstance(model_config, ATBCRShiftModelConfig):
+        raise TypeError("atbcr_shift requires ATBCRShiftModelConfig")
+    return ATBCRShiftModel(config=model_config, domain=domain)
+
+
 def _normalize_name(name: str) -> str:
     return name.lower().replace("-", "_")
 
 
 ModelFactory.register("atbcr", _build_atbcr_model)
+ModelFactory.register("atbcr_shift", _build_atbcr_shift_model)

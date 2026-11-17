@@ -32,6 +32,15 @@ class StepMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class ShiftStepMetrics(StepMetrics):
+    """Metrics specific to ``atbcr_shift``; ATBCR frequencies use ``atbcr_steps``."""
+
+    shift_steps: int
+    atbcr_steps: int
+    shift_frequency: float
+
+
+@dataclass(frozen=True, slots=True)
 class MetricSummary:
     """Descriptive statistics and a normal-approximation 95% CI for the mean."""
 
@@ -49,10 +58,15 @@ class RuleCounts:
     confidence: int = 0
     inaction: int = 0
     repulsion: int = 0
+    shift: int = 0
 
     @property
     def total(self) -> int:
         return self.confidence + self.inaction + self.repulsion
+
+    @property
+    def executed_total(self) -> int:
+        return self.total + self.shift
 
     def add(self, outcome: str) -> None:
         if outcome == "confidence":
@@ -61,6 +75,8 @@ class RuleCounts:
             self.inaction += 1
         elif outcome == "repulsion":
             self.repulsion += 1
+        elif outcome == "shift":
+            self.shift += 1
         else:
             raise ValueError(f"Unsupported interaction outcome: {outcome}")
 
@@ -71,6 +87,7 @@ class RuleCounts:
             confidence=self.confidence - previous.confidence,
             inaction=self.inaction - previous.inaction,
             repulsion=self.repulsion - previous.repulsion,
+            shift=self.shift - previous.shift,
         )
 
 
@@ -255,21 +272,50 @@ def summarize_step(
     unbounded_extreme_cutoff: float,
     cluster_tolerance: float,
     domain: str,
+    include_shift_metrics: bool = False,
 ) -> StepMetrics:
     """Build the standard metrics record for one snapshot."""
 
-    total = max(1, counts.total)
-    window_denominator = max(1, window_size)
+    if include_shift_metrics:
+        total = counts.total
+        window_denominator = window_counts.total
+    else:
+        total = max(1, counts.total)
+        window_denominator = max(1, window_size)
+    confidence_frequency = counts.confidence / total if total else math.nan
+    inaction_frequency = counts.inaction / total if total else math.nan
+    repulsion_frequency = counts.repulsion / total if total else math.nan
+    confidence_frequency_window = (
+        window_counts.confidence / window_denominator if window_denominator else math.nan
+    )
+    inaction_frequency_window = (
+        window_counts.inaction / window_denominator if window_denominator else math.nan
+    )
+    repulsion_frequency_window = (
+        window_counts.repulsion / window_denominator if window_denominator else math.nan
+    )
     percentiles = abs_percentiles(opinions)
     effective_tolerance = effective_cluster_tolerance(cluster_tolerance, domain)
-    return StepMetrics(
+    metric_type = ShiftStepMetrics if include_shift_metrics else StepMetrics
+    shift_values = (
+        {
+            "shift_steps": counts.shift,
+            "atbcr_steps": counts.total,
+            "shift_frequency": (
+                counts.shift / counts.executed_total if counts.executed_total else math.nan
+            ),
+        }
+        if include_shift_metrics
+        else {}
+    )
+    return metric_type(
         step=step,
-        confidence_frequency=counts.confidence / total,
-        inaction_frequency=counts.inaction / total,
-        repulsion_frequency=counts.repulsion / total,
-        confidence_frequency_window=window_counts.confidence / window_denominator,
-        inaction_frequency_window=window_counts.inaction / window_denominator,
-        repulsion_frequency_window=window_counts.repulsion / window_denominator,
+        confidence_frequency=confidence_frequency,
+        inaction_frequency=inaction_frequency,
+        repulsion_frequency=repulsion_frequency,
+        confidence_frequency_window=confidence_frequency_window,
+        inaction_frequency_window=inaction_frequency_window,
+        repulsion_frequency_window=repulsion_frequency_window,
         max_abs_opinion=max_abs(opinions),
         mean_abs_opinion=mean_abs(opinions),
         std_opinion=population_std(opinions),
@@ -279,6 +325,7 @@ def summarize_step(
         configured_cluster_tolerance=cluster_tolerance,
         effective_cluster_tolerance=effective_tolerance,
         unbounded_extreme_cutoff=unbounded_extreme_cutoff,
+        **shift_values,
     )
 
 

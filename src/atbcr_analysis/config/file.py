@@ -12,9 +12,12 @@ from atbcr_analysis.config.initializers import OpinionInitializerConfig
 from atbcr_analysis.config.metrics import MetricsConfig
 from atbcr_analysis.config.monte_carlo import MonteCarloConfig
 from atbcr_analysis.config.scenarios import (
+    ATBCRShiftScenarioConfig,
+    ATBCRShiftScenarioParametersConfig,
     ScenarioConfig,
     ScenarioGridConfig,
-    ScenarioParametersConfig,
+    ScenarioParametersType,
+    ScenarioType,
 )
 from atbcr_analysis.config.variants import DEFAULT_VARIANTS, VariantConfig
 from atbcr_analysis.normalizers import NormalizationConfig
@@ -25,7 +28,7 @@ class RunConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    scenarios: dict[str, ScenarioParametersConfig] | None = None
+    scenarios: dict[str, ScenarioParametersType] | None = None
     scenario_grid: ScenarioGridConfig | None = None
     variants: tuple[VariantConfig, ...] = DEFAULT_VARIANTS
     graph: GraphConfig = Field(default_factory=CompleteGraphConfig)
@@ -48,7 +51,7 @@ class RunConfig(BaseModel):
         return self
 
     @property
-    def resolved_scenarios(self) -> tuple[ScenarioConfig, ...]:
+    def resolved_scenarios(self) -> tuple[ScenarioType, ...]:
         if self.scenario_grid is not None:
             return self.scenario_grid.scenarios()
         if self.scenarios is None:
@@ -90,7 +93,7 @@ class DefaultsConfig(BaseModel):
 class ExperimentConfig(DefaultsConfig):
     """One experiment entry in a YAML file."""
 
-    scenarios: dict[str, ScenarioParametersConfig] | None = None
+    scenarios: dict[str, ScenarioParametersType] | None = None
     scenario_grid: ScenarioGridConfig | None = None
     output_dir: Path | None = None
 
@@ -126,10 +129,14 @@ class FileConfig(BaseModel):
 
 
 def _named_scenarios(
-    scenarios: dict[str, ScenarioParametersConfig],
-) -> tuple[ScenarioConfig, ...]:
+    scenarios: dict[str, ScenarioParametersType],
+) -> tuple[ScenarioType, ...]:
     return tuple(
-        ScenarioConfig(name=name, **parameters.model_dump())
+        (
+            ATBCRShiftScenarioConfig(name=name, **parameters.model_dump())
+            if isinstance(parameters, ATBCRShiftScenarioParametersConfig)
+            else ScenarioConfig(name=name, **parameters.model_dump())
+        )
         for name, parameters in scenarios.items()
     )
 

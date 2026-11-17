@@ -1,0 +1,25 @@
+experiments:
+  - scenarios:
+      shift_example:
+        model: atbcr_shift
+        epsilon: 0.4
+        theta: 1.4
+        mu: 0.1
+        p: 0.9
+        shift_lambda: 0.01
+    variants:
+      - name: bounded_m11
+        domain: bounded_m11
+        threshold_scale: 1.0
+        initializer: {kind: uniform, low: -1.0, high: 1.0}
+    graph: {kind: complete, n_agents: 20}
+    steps: 50
+    metrics:
+      record_every: 10
+      store_opinion_snapshots: true
+      store_normalization_events: false
+    monte_carlo: {runs: 1, workers: 1, seed: 7}
+    normalizations:
+      - kind: none
+    output_dir: runs/atbcr_shift_example
+    show_progress: false

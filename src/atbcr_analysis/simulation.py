@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass
 from typing import Callable
 
-from atbcr_analysis.config import SimulationConfig
+from atbcr_analysis.config import ATBCRShiftModelConfig, SimulationConfig
 from atbcr_analysis.graphs import EdgeSequence, complete_graph_edges, graph_edges, generate_graph
 from atbcr_analysis.metrics import RuleCounts, StepMetrics, max_abs, summarize_step
 from atbcr_analysis.models import build_model
@@ -160,6 +160,7 @@ class SimulationRunner:
                     confidence=counts.confidence,
                     inaction=counts.inaction,
                     repulsion=counts.repulsion,
+                    shift=counts.shift,
                 )
                 last_snapshot_step = step
             if progress_callback is not None and (
@@ -206,6 +207,7 @@ def _append_snapshot(
         unbounded_extreme_cutoff=config.metrics.unbounded_extreme_cutoff,
         cluster_tolerance=config.metrics.cluster_tolerance,
         domain=config.domain,
+        include_shift_metrics=isinstance(config.model, ATBCRShiftModelConfig),
     )
     snapshot = tuple(opinions) if config.metrics.store_opinion_snapshots else None
     trajectory.append(OpinionSnapshot(metrics=metrics, opinions=snapshot))

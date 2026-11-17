@@ -272,6 +272,47 @@ class ComparativePlotsTests(unittest.TestCase):
                 ["replica", "replica", "summary"],
             )
 
+    def test_faceted_plot_uses_one_panel_per_parameter_pair(self) -> None:
+        import matplotlib.pyplot as plt
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "trajectories.csv"
+            output = Path(directory) / "faceted.png"
+            _write_trajectories(
+                source,
+                [
+                    _row(
+                        scenario=scenario,
+                        variant=variant,
+                        value=value,
+                    )
+                    for scenario, value in (("e0p2_t0p7", 1.0), ("e0p3_t0p8", 2.0))
+                    for variant in ("dynamic_thresholds_k1", "dynamic_thresholds_k10")
+                ],
+            )
+
+            with patch("matplotlib.pyplot.close") as close_plot:
+                plot_comparative_trajectories(
+                    [source],
+                    output,
+                    metric="metric_value",
+                    facet_pairs=True,
+                )
+
+            figure = close_plot.call_args.args[0]
+            try:
+                self.assertEqual(len(figure.axes), 2)
+                self.assertEqual(
+                    [axis.get_title() for axis in figure.axes],
+                    [r"$\epsilon=0.2,\ \theta=0.7$", r"$\epsilon=0.3,\ \theta=0.8$"],
+                )
+                self.assertEqual(
+                    [text.get_text() for text in figure.legends[0].get_texts()],
+                    [r"$k=1$", r"$k=10$"],
+                )
+            finally:
+                plt.close(figure)
+
     def test_compare_cli_delegates_all_options(self) -> None:
         with patch(
             "atbcr_analysis.plots.plot_cli.plot_comparative_trajectories",
@@ -301,6 +342,7 @@ class ComparativePlotsTests(unittest.TestCase):
                     "--aggregate",
                     "median",
                     "--ci",
+                    "--facet-pairs",
                     "--fit",
                     "--fit-start",
                     "100",
@@ -325,6 +367,7 @@ class ComparativePlotsTests(unittest.TestCase):
             transform="log",
             aggregate="median",
             include_ci=True,
+            facet_pairs=True,
             fit=True,
             fit_start=100,
             fit_end=500,

@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from atbcr_analysis.experiments import FINAL_METRIC_NAMES, ExperimentResult
+from atbcr_analysis.experiments import FINAL_METRIC_NAMES, SHIFT_METRIC_NAMES, ExperimentResult
 
 
 _SNAPSHOT_FIELDNAMES = [
@@ -62,7 +62,14 @@ def write_summary_csv(path: Path, results: list[ExperimentResult]) -> None:
             "normalization_every",
             "runs",
         ]
-        for metric_name in FINAL_METRIC_NAMES:
+        metric_names = list(FINAL_METRIC_NAMES)
+        if any(
+            name in result.metric_summaries
+            for result in results
+            for name in SHIFT_METRIC_NAMES
+        ):
+            metric_names.extend(SHIFT_METRIC_NAMES)
+        for metric_name in metric_names:
             fieldnames.extend(
                 [
                     f"{metric_name}_mean",
@@ -122,6 +129,13 @@ def write_trajectories_csv(path: Path, results: list[ExperimentResult]) -> None:
             "effective_cluster_tolerance",
             "unbounded_extreme_cutoff",
         ]
+        if any(
+            hasattr(snapshot.metrics, "shift_steps")
+            for result in results
+            for simulation in result.simulations
+            for snapshot in simulation.trajectory
+        ):
+            fieldnames.extend(SHIFT_METRIC_NAMES)
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for result in results:

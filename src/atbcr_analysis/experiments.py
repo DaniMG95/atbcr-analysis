@@ -29,6 +29,7 @@ FINAL_METRIC_NAMES: tuple[str, ...] = (
     "p95_abs_opinion",
     "p99_abs_opinion",
 )
+SHIFT_METRIC_NAMES: tuple[str, ...] = ("shift_steps", "atbcr_steps", "shift_frequency")
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,11 +134,14 @@ def run_monte_carlo(
         simulations = tuple(completed_simulations)
 
     final_metrics = [run.final_metrics for run in simulations]
+    metric_names = FINAL_METRIC_NAMES
+    if hasattr(final_metrics[0], "shift_steps"):
+        metric_names += SHIFT_METRIC_NAMES
     metric_summaries = {
         metric_name: summarize_values(
             [float(getattr(item, metric_name)) for item in final_metrics],
         )
-        for metric_name in FINAL_METRIC_NAMES
+        for metric_name in metric_names
     }
     return ExperimentResult(
         scenario_name=simulation_config.name,

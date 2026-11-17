@@ -2,6 +2,7 @@
 
 from atbcr_analysis.config import (
     ATBCRModelConfig,
+    ATBCRShiftModelConfig,
     DEFAULT_VARIANTS,
     BarabasiAlbertGraphConfig,
     BinaryConcernOpinionInitializerConfig,
@@ -38,6 +39,7 @@ from atbcr_analysis.normalizers import (
 )
 from atbcr_analysis.models import (
     ATBCRModel,
+    ATBCRShiftModel,
     InteractionEvent,
     ModelFactory,
     OpinionDynamicsModel,
@@ -54,6 +56,8 @@ from atbcr_analysis.metrics import MetricSummary
 __all__ = [
     "ATBCRModel",
     "ATBCRModelConfig",
+    "ATBCRShiftModel",
+    "ATBCRShiftModelConfig",
     "BarabasiAlbertGraphConfig",
     "BinaryConcernOpinionInitializer",
     "BinaryConcernOpinionInitializerConfig",

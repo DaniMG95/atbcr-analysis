@@ -59,7 +59,29 @@ class ATBCRModelConfig(ModelConfig):
         )
 
 
-ModelConfigType = ATBCRModelConfig | ModelConfig
+class ATBCRShiftModelConfig(ATBCRModelConfig):
+    """Parameters for ATBCR interactions mixed with individual opinion shifts."""
+
+    name: Literal["atbcr_shift"] = "atbcr_shift"
+    p: float = Field(default=0.9, ge=0, le=1, allow_inf_nan=False)
+    shift_lambda: float = Field(default=0.01, ge=-1, le=1, allow_inf_nan=False)
+
+    def scale_thresholds(self, factor: float) -> ATBCRShiftModelConfig:
+        return self.model_copy(
+            update={"epsilon": self.epsilon * factor, "theta": self.theta * factor},
+        )
+
+    def with_threshold_policy(
+        self,
+        mode: Literal["fixed", "max_abs"],
+        update_every: int,
+    ) -> ATBCRShiftModelConfig:
+        return self.model_copy(
+            update={"threshold_mode": mode, "threshold_update_every": update_every},
+        )
+
+
+ModelConfigType = ATBCRShiftModelConfig | ATBCRModelConfig | ModelConfig
 
 
 def scale_model_thresholds(model: ModelConfigType, factor: float) -> ModelConfigType:
