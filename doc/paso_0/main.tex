@@ -1298,4 +1298,750 @@ En conclusión, el uso de umbrales dinámicos evita el predominio generalizado d
 Los resultados muestran que tanto la normalización directa de las opiniones como la adaptación global de los umbrales pueden alterar el equilibrio entre atracción y repulsión.
 
 
+\section{Modelo ATBCR con desplazamiento individual}
+\label{sec:atbcr-shift}
+
+\subsection{Motivación}
+\label{sec:shift-motivacion}
+
+A la vista de estos resultados, se ha propuesto un planteamiento distinto: mantener el ATBCR en su dominio acotado $[-1,1]$, sin normalizar las opiniones ni modificar los umbrales, y añadir un mecanismo independiente que desplace opiniones individuales. El objetivo es estudiar si este modelo permite reproducir los escenarios del «modelo universal»: compresión, expansión y desplazamiento de las opiniones, este último en ambos sentidos.
+
+\subsection{Definición del modelo}
+\label{sec:shift-definicion}
+
+El modelo, denominado \texttt{atbcr\_shift}, trabaja con opiniones $x_i(t)\in[-1,1]$ y con los umbrales efectivos del dominio centrado, $\epsilon'=2\epsilon$ y $\theta'=2\theta$. En cada paso se ejecuta \emph{una sola} de las dos secuencias siguientes::
+
+\begin{enumerate}
+    \item \textbf{Secuencia ATBCR}, con probabilidad $p$. Se elige al azar un par de agentes $(i,j)$ y, con $\delta=\mu\,(x_j-x_i)$, se aplica la regla del ATBCR:
+    \item \textbf{Secuencia de desplazamiento}, con probabilidad $1-p$. Se elige al azar, un único agente $i$ y solo se actualiza su opinión:
+    \begin{equation}
+    \label{eq:shift-desplazamiento}
+    x_i(t+1)=\operatorname{clip}_{[-1,1]}\bigl(x_i(t)+\lambda_{\mathrm{shift}}\bigr).
+    \end{equation}
+\end{enumerate}
+
+Se debe notar que un paso de desplazamiento y un paso de inacción del ATBCR son eventos distintos: el primero no evalúa ningún par de agentes, mientras que el segundo sí lo hace, aunque las opiniones no cambien. El modelo introduce los dos parámetros recogidos en la Tabla~\ref{tab:shift-parametros}.
+
+\begin{table}[htbp]
+\centering
+\caption{Parámetros añadidos por el modelo \texttt{atbcr\_shift}.}
+\label{tab:shift-parametros}
+\begin{tabular}{ccp{8.5cm}}
+\toprule
+Parámetro & Rango & Significado \\
+\midrule
+$p$ & $[0,1]$ & Probabilidad de ejecutar un paso de interacción ATBCR. \\
+$\lambda_{\mathrm{shift}}$ & $[-1,1]$ & Desplazamiento de las opinion individual. Su signo determina el sentido del desplazamiento. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Propiedades}
+\label{sec:shift-propiedades}
+
+He deducido estas tres propiedades siguientes.
+
+\begin{enumerate}
+    \item Con $p=1$ todos los pasos pertenecen al ATBCR y el modelo coincide con el ATBCR acotado en $[-1,1]$, con $p=1$ y con la misma semilla, se obtienen exactamente las mismas trayectorias que en el ATBCR original.
+    \item El numero de pasos de desplazamiento ejecutados, correspondara tras $T$ pasos es $(1-p)T$.
+    \item Cuando $\lambda_{\mathrm{shift}}=0$, el modelo equivale al ATBCR acotado ejecutado durante aproximadamente $pT$ pasos: el parámetro $p$ solo reescala el tiempo.
+\end{enumerate}
+
+\subsection{Métricas}
+\label{sec:shift-metricas}
+
+Se utilizan las mismas métricas y representaciones que en las secciones anteriores. En este modelo, las frecuencias de confianza, inacción y repulsión se calculan sobre los pasos en que se ejecutó la rama ATBCR, de modo que $R_C+R_N+R_R=1$, mientras que la proporción de pasos de desplazamiento se registra por separado. Esto permite que las frecuencias midan qué hace el ATBCR cuando actúa y sean directamente comparables con las del ATBCR original.
+
+Algunas métricas anteriores estan en valor absoluto, como la magnitud media o los percentiles de $|x_i|$, por lo tanto, no indican el sentido del desplazamiento: un desplazamiento hacia $+1$ y otro hacia $-1$ de la misma magnitud producen los mismos valores. Por ello, se añaden tres métricas calculadas a partir de las opiniones con signo:
+\begin{itemize}
+    \item la media de las opiniones, $\bar{x}$, que se compara con el desplazamiento
+    \item la mediana del grupo central, formado por los agentes con $|x_i|<0{,}8$, que permite medir el desplazamiento de ese grupo cuando pertenece en los extremos;
+    \item la proporción de agentes en cada extremo por separado, $E_{+}$ ($x_i\geq0{,}8$) y $E_{-}$ ($x_i\leq-0{,}8$).
+\end{itemize}
+
+
+\subsection{Configuración experimental}
+\label{sec:shift-configuracion}
+
+Se mantiene la configuración común de los experimentos anteriores
+Se estudian los tres pares de umbrales de la diagonal utilizados en las anteriores secciones $(\epsilon,\theta)\in\{(0{,}2;0{,}7),(0{,}3;0{,}8),(0{,}4;0{,}9)\}$. Para cada par se ejecutan las 15 configuraciones de la Tabla~\ref{tab:shift-barrido}, lo que da un total de 45 configuraciones.
+
+\begin{table}[htbp]
+\centering
+\caption{Configuraciones de $(p,\lambda_{\mathrm{shift}})$ ejecutadas para cada par de umbrales.}
+\label{tab:shift-barrido}
+\begin{tabular}{clc}
+\toprule
+$p$ & Valores de $\lambda_{\mathrm{shift}}$ & Configuraciones \\
+\midrule
+$1$   & $0$ & 1 \\
+$0{,}9$ & $0,\ \pm0{,}01,\ \pm0{,}02,\ \pm0{,}10$ & 7 \\
+$0{,}5$ & $0,\ \pm0{,}01,\ \pm0{,}02,\ \pm0{,}10$ & 7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+Se toma como configuracion de control $\lambda_{\mathrm{shift}}=0$ y el mismo valor de $p$. La configuración con $p=1$ se utiliza como referencia del ATBCR original. Todas las configuraciones comparten las semillas de cada réplica. Por tanto, las diferencias entre una configuración y su control se deben únicamente al desplazamiento..
+
+Para identificar los escenarios del «modelo universal» se utilizan dos referencias. Los criterios se recogen en la Tabla~\ref{tab:shift-criterios}.
+
+\begin{table}[htbp]
+\centering
+\caption{Criterios para clasificar los escenarios.}
+\label{tab:shift-criterios}
+\begin{tabular}{p{3cm}p{9.8cm}}
+\toprule
+Escenario & Criterio \\
+\midrule
+Desplazamiento & En los histogramas, la distribución se mueve en el sentido de $\lambda_{\mathrm{shift}}$ conservando su forma. \\
+Compresión & $\sigma_{\mathrm{final}}/\sigma_0<0{,}5$. \\
+Expansión & $\sigma_{\mathrm{final}}/\sigma_0>1{,}2$. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Efecto de $p$ sin desplazamiento}
+\label{sec:shift-efecto-p}
+
+Antes de estudiar el desplazamiento vamos a analizar el efecto de reducir $p$ manteniendo $\lambda_{\mathrm{shift}}=0$. En este caso, los pasos de desplazamiento no modifican ninguna opinión y se reduce el número de interacciones ATBCR.
+
+La Tabla~\ref{tab:shift-efecto-p} recoge los resultados finales para los tres pares de umbrales. La proporción de agentes extremizados, la desviación típica y las frecuencias de confianza y repulsión apenas cambian con $p$ en los pares $(0{,}2;0{,}7)$ y $(0{,}3;0{,}8)$. La diferencia principal aparece en el número de clústeres.
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados finales con $\lambda_{\mathrm{shift}}=0$ para distintos valores de $p$.}
+\label{tab:shift-efecto-p}
+\begin{tabular}{ccrrrrrr}
+\toprule
+$(\epsilon,\theta)$ & $p$ & $E$ (\%) & $\sigma_X$ & Clústeres & $R_C$ (\%) & $R_N$ (\%) & $R_R$ (\%) \\
+\midrule
+$(0{,}2;0{,}7)$ & 1     & 59,12 & 0,7684 & 4,48  & 33,77 & 48,98 & 17,25 \\
+ & 0,9   & 59,17 & 0,7688 & 6,38  & 33,67 & 49,08 & 17,24 \\
+ & 0,5   & 59,20 & 0,7690 & 41,42 & 33,25 & 49,68 & 17,07 \\
+\midrule
+$(0{,}3;0{,}8)$ & 1     & 36,47 & 0,6022 & 3,16  & 48,14 & 45,43 & 6,43 \\
+ & 0,9   & 36,62 & 0,6034 & 3,79  & 48,04 & 45,51 & 6,45 \\
+ & 0,5   & 36,67 & 0,6040 & 43,47 & 48,38 & 45,42 & 6,20 \\
+\midrule
+$(0{,}4;0{,}9)$ & 1     & 0,01  & 0,0028 & 1,10  & 97,41 & 2,57  & 0,02 \\
+ & 0,9   & 0,02  & 0,0058 & 1,21  & 97,11 & 2,87  & 0,02 \\
+ & 0,5   & 0,03  & 0,0068 & 2,57  & 94,82 & 5,14  & 0,04 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El número de clústeres se calcula con una tolerancia de $0{,}002$. La Figura~\ref{fig:shift-cluster-count} muestra su evolución para $(\epsilon,\theta)=(0{,}3;0{,}8)$. Frente a los pasos totales (Figura~\ref{fig:shift-cluster-count-step}), las curvas se separan: cuanto menor es $p$, más lenta es la contracción. Frente a los pasos ATBCR ejecutados (Figura~\ref{fig:shift-cluster-count-atbcr}), las tres curvas se superponen, y la de $p=0{,}5$ termina a mitad de recorrido porque solo dispone de unos $50\,000$ pasos ATBCR.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/steps_number_clusters.png}
+        \caption{Frente a los pasos totales.}
+        \label{fig:shift-cluster-count-step}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/steps_atcbr_number_clusters.png}
+        \caption{Frente a los pasos ATBCR ejecutados.}
+        \label{fig:shift-cluster-count-atbcr}
+    \end{subfigure}
+    \caption{Evolución del número medio de clústeres (media de 100 réplicas) para $(\epsilon,\theta)=(0{,}3;0{,}8)$ y $\lambda_{\mathrm{shift}}=0$. Las curvas \texttt{p1}, \texttt{p09} y \texttt{p05} corresponden a $p=1$, $p=0{,}9$ y $p=0{,}5$.}
+    \label{fig:shift-cluster-count}
+\end{figure}
+
+El mismo efecto explica el cambio en las frecuencias de $(0{,}4;0{,}9)$, donde la inacción pasa del 2,57\,\% con $p=1$ al 5,14\,\% con $p=0{,}5$. En este par, casi todas las inacciones se producen al inicio, mientras se forma el consenso; después, prácticamente todas las interacciones son de confianza. El número total de inacciones es el mismo en ambos casos (unas $2\,570$), pero con $p=1$ se reparte entre $100\,000$ pasos ATBCR, la mitad de ellos en la fase de confianza, mientras que con $p=0{,}5$ se reparte entre unos $50\,000$. Por eso la frecuencia acumulada se duplica. Del mismo modo, la desviación típica del consenso es algo mayor con $p<1$ porque la contracción no ha avanzado tanto.
+
+\subsection{Efecto del desplazamiento en el régimen intermedio}
+\label{sec:shift-lambda-intermedio}
+
+Se va estudiar el efecto de $\lambda_{\mathrm{shift}}$ en el par $(\epsilon,\theta)=(0{,}3;0{,}8)$ con $p=0{,}9$, para $\lambda_{\mathrm{shift}}\in\{0,\pm0{,}01,\pm0{,}02\}$. Este par vimos que producia una estructura formada por un grupo central y dos grupos extremos en $\pm1$.
+
+\subsubsection{Trayectorias}
+
+La Figura~\ref{fig:shift-intermedio-trayectorias} muestra las trayectorias individuales de las opiniones con semilla~7. En todos los casos se forman primero los tres grupos, hacia el paso $40\,000$. A partir de ese momento, con $\lambda_{\mathrm{shift}}\neq0$ el grupo central se desplaza en el sentido de $\lambda_{\mathrm{shift}}$, mientras que los grupos extremos permanecen en $\pm1$.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/opinions_e0p3_t0p8_p09_shift_minus002.png}
+        \caption{$\lambda_{\mathrm{shift}}=-0{,}02$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/opinions_e0p3_t0p8_p09_shift_minus001.png}
+        \caption{$\lambda_{\mathrm{shift}}=-0{,}01$.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/opinions_e0p3_t0p8_p09_shift_zero.png}
+        \caption{$\lambda_{\mathrm{shift}}=0$ (control).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/opinions_e0p3_t0p8_p09_shift_001.png}
+        \caption{$\lambda_{\mathrm{shift}}=+0{,}01$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/opinions_e0p3_t0p8_p09_shift_002.png}
+        \caption{$\lambda_{\mathrm{shift}}=+0{,}02$.}
+    \end{subfigure}
+    \caption{Trayectorias individuales de las opiniones para $(\epsilon,\theta)=(0{,}3;0{,}8)$, $p=0{,}9$ y semilla~7.}
+    \label{fig:shift-intermedio-trayectorias}
+\end{figure}
+
+\subsubsection{Distribuciones finales}
+La Figura~\ref{fig:shift-intermedio-distribuciones} muestra las distribuciones finales agregadas de las 100 réplicas. El pico central se desplaza en el sentido de $\lambda_{\mathrm{shift}}$, mientras que las barras de $\pm1$ se mantienen en los límites. Como cada réplica sitúa el grupo central en una posición ligeramente distinta.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_minus002.png}
+        \caption{$\lambda_{\mathrm{shift}}=-0{,}02$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_minus001.png}
+        \caption{$\lambda_{\mathrm{shift}}=-0{,}01$.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_zero.png}
+        \caption{$\lambda_{\mathrm{shift}}=0$ (control).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_001.png}
+        \caption{$\lambda_{\mathrm{shift}}=+0{,}01$.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_002.png}
+        \caption{$\lambda_{\mathrm{shift}}=+0{,}02$.}
+    \end{subfigure}
+    \caption{Distribución final de las opiniones (100 réplicas) para $(\epsilon,\theta)=(0{,}3;0{,}8)$ y $p=0{,}9$.}
+    \label{fig:shift-intermedio-distribuciones}
+\end{figure}
+
+\subsubsection{Resultados finales.}
+La Tabla~\ref{tab:shift-intermedio} recoge los resultados al final de la simulación. La proporción de extremos y la desviación típica apenas cambian respecto al control, por lo que el desplazamiento no comprime ni expande la distribución, cambia es su reparto entre los dos extremos. Como estas métricas globales no muestran el desplazamiento, se recurre a las métricas con signo definidas en la Sección~\ref{sec:shift-metricas}, calculadas como diferencia respecto al control en cada réplica.
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados finales para $(\epsilon,\theta)=(0{,}3;0{,}8)$ y $p=0{,}9$. Medias de 100 réplicas. $\Delta$ indica la diferencia respecto al control ($\lambda_{\mathrm{shift}}=0$)}
+\label{tab:shift-intermedio}
+\begin{tabular}{rccccccc}
+\toprule
+$\lambda_{\mathrm{shift}}$ & $E$ (\%) & $\sigma_X$ & $\Delta\bar{x}$ & $\Delta$ mediana central & $E_{+}$ (\%) & $E_{-}$ (\%) \\
+\midrule
+$0$       & 36,62 & 0,6034 & ---     & ---     & 18,24 & 18,39      \\
+$+0{,}01$ & 36,54 & 0,6018 & $+0{,}075$ & $+0{,}091$ & 18,99 & 17,56  \\
+$-0{,}01$ & 36,54 & 0,6015 & $-0{,}075$ & $-0{,}091$ & 17,39 & 19,14 \\
+$+0{,}02$ & 36,84 & 0,6036 & $+0{,}150$ & $+0{,}182$ & 19,94 & 16,91  \\
+$-0{,}02$ & 36,84 & 0,6033 & $-0{,}150$ & $-0{,}185$ & 16,84 & 20,01  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El grupo central se desplaza $\pm0{,}091$ con $|\lambda_{\mathrm{shift}}|=0{,}01$ y unos $\pm0{,}18$ con $|\lambda_{\mathrm{shift}}|=0{,}02$, es decir, el doble. El efecto es simétrico: al cambiar el signo de $\lambda_{\mathrm{shift}}$ se obtienen los mismos valores con el signo opuesto, y los extremos intercambian sus proporciones.
+
+Según los valores de la Tabla~\ref{tab:shift-criterios}, este comportamiento es un \emph{desplazamiento parcial}: se traslada el grupo central, que reúne la mayoria de los agentes, mientras que los extremos permanecen anclados en $\pm1$ y la dispersión global no cambia. No se trata, por tanto, de un desplazamiento de toda la distribución.
+
+
+\subsection{Intensidad del desplazamiento}
+\label{sec:shift-intensidad}
+
+En la sección anterior el desplazamiento era pequeño y el grupo central se trasladaba sin alcanzar los extremos. En esta sección se va estudiar qué ocurre cuando la cantidad total de desplazamiento aumenta, ya sea porque se ejecutan más pasos de desplazamiento ($p=0{,}5$) o porque cada paso desplaza más ($|\lambda_{\mathrm{shift}}|=0{,}10$). Para comparar configuraciones con distintos valores de $p$ y $\lambda_{\mathrm{shift}}$ se utiliza el desplazamiento nominal, que se define a continuación.
+
+\subsubsection{Desplazamiento nominal}
+\label{sec:shift-nominal}
+
+El \emph{desplazamiento nominal} es la distancia que se desplazaría la media de las opiniones si el único efecto del modelo fuese sumar $\lambda_{\mathrm{shift}}$ en cada paso de desplazamiento, sin recorte al dominio. Las interacciones de confianza y repulsión conservan la suma de las opiniones, de modo que solo los pasos de desplazamiento y el recorte modifican la suma total. Cada paso de desplazamiento suma $\lambda_{\mathrm{shift}}$ a una opinión, por lo que, tras $N_{\mathrm{shift}}$ pasos de desplazamiento, la suma total ha aumentado $\lambda_{\mathrm{shift}}N_{\mathrm{shift}}$ y la media.
+\begin{equation}
+\label{eq:shift-nominal-def}
+\Delta\bar{x}_{\mathrm{nom}}=\frac{\lambda_{\mathrm{shift}}\,N_{\mathrm{shift}}}{N}.
+\end{equation}
+
+Como cada paso es de desplazamiento con probabilidad $1-p$, el número esperado de pasos de desplazamiento tras $T$ pasos es $(1-p)T$, y el desplazamiento nominal esperado al final de la simulación es
+\begin{equation}
+\label{eq:shift-nominal-esperado}
+\Delta\bar{x}_{\mathrm{nom}}\approx\frac{(1-p)\,T\,\lambda_{\mathrm{shift}}}{N}.
+\end{equation}
+Por ejemplo, con $p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}01$, $T=100\,000$ y $N=1000$, se ejecutan unos $10\,000$ pasos de desplazamiento y el desplazamiento nominal es $10\,000\cdot0{,}01/1000=0{,}10$. Dicho de otro modo, cada agente recibe en promedio $(1-p)T/N=10$ desplazamientos, que suman $10\cdot0{,}01=0{,}10$. De la Ecuación~\eqref{eq:shift-nominal-esperado} se obtiene también la \emph{velocidad nominal}, $(1-p)\,\lambda_{\mathrm{shift}}/N$ por paso, que con estos valores equivale a $0{,}001$ cada $1000$ pasos.
+
+La Tabla~\ref{tab:shift-nominal-valores} recoge el desplazamiento nominal de todas las configuraciones del barrido.
+\begin{table}[htbp]
+\centering
+\caption{Desplazamiento nominal esperado al final de la simulación, $(1-p)\,T\,|\lambda_{\mathrm{shift}}|/N$, con $T=100\,000$ y $N=1000$.}
+\label{tab:shift-nominal-valores}
+\begin{tabular}{ccc}
+\toprule
+$|\lambda_{\mathrm{shift}}|$ & $p=0{,}9$ & $p=0{,}5$ \\
+\midrule
+$0{,}01$ & $0{,}10$ & $0{,}50$ \\
+$0{,}02$ & $0{,}20$ & $1{,}00$ \\
+$0{,}10$ & $1{,}00$ & $5{,}00$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El desplazamiento nominal es una referencia. No tiene en cuenta el recorte, que elimina los desplazamientos que llevan una opinión fuera de $[-1,1]$. La diferencia entre el desplazamiento observado de la media y el nominal mide, por tanto, cuánto han intervenido estos efectos. En la Sección~\ref{sec:shift-lambda-intermedio}, por ejemplo, el grupo central se desplazaba casi el valor nominal, mientras que la media se desplazaba menos porque el recorte anulaba los desplazamientos de los agentes situados en los extremos.
+
+\subsubsection{Resultados para $(\epsilon,\theta)=(0{,}3;0{,}8)$}
+\label{sec:shift-intensidad-03-08}
+
+Se estudian las configuraciones, como el efecto es simétrico respecto al signo de $\lambda_{\mathrm{shift}}$, se muestran solo los valores positivos.
+
+La Figura~\ref{fig:shift-intensidad-trayectorias} muestra las trayectorias de la réplica con semilla~7. Con $\lambda_{\mathrm{shift}}=0{,}01$, el grupo central se desplaza hacia $+1$ y termina en torno a $0{,}35$ sin alcanzar el extremo; en esta réplica el grupo central del control está en torno a $0$. Con nominal 1,0, el grupo central se desplaza hasta que, empieza a abrirse hacia $+1$ y termina fundiéndose con el grupo extremo positivo. Las dos configuraciones con este nominal ($p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ y $p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$) presentan la misma evolución. Con nominal 5,0, el grupo central no llega a formarse: las opiniones se desplazan hacia $+1$ desde el inicio y prácticamente todas se encuentran en el extremo positivo.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p3_t0p8_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$ (control).}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p3_t0p8_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,5).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p3_t0p8_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,0).}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p3_t0p8_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,0).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p3_t0p8_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,0).}
+    \end{subfigure}
+    \caption{Trayectorias individuales de las opiniones para $(\epsilon,\theta)=(0{,}3;0{,}8)$ con distintas intensidades de desplazamiento (semilla~7).}
+    \label{fig:shift-intensidad-trayectorias}
+\end{figure}
+
+La Figura~\ref{fig:shift-intensidad-distribuciones} muestra las distribuciones finales. En lo que se puede observar lo que se ha mencionado previamente.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$ (control).}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,5).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,0).}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,0).}
+    \end{subfigure}
+
+    \vspace{0.5em}
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p3_t0p8_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,0).}
+    \end{subfigure}
+    \caption{Distribución final de las opiniones (100 réplicas) para $(\epsilon,\theta)=(0{,}3;0{,}8)$ con distintas intensidades de desplazamiento.}
+    \label{fig:shift-intensidad-distribuciones}
+\end{figure}
+
+La Tabla~\ref{tab:shift-intensidad} recoge los resultados finales. Las dos configuraciones con nominal 1,0 dan resultados muy parecidos, a pesar de tener valores de $p$ distintos: el resultado depende de la cantidad total de desplazamiento y no de cómo se reparte. Como se puede observar, la configuración $p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ llega mucho más lejos que $p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$, por lo que tampoco es $p$ por sí solo lo que determina el comportamiento, sino la combinacion de ellas, que definen el nominal.
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados finales para $(\epsilon,\theta)=(0{,}3;0{,}8)$ con distintas intensidades de desplazamiento. Medias de 100 réplicas. $\Delta\bar{x}$ es la diferencia de la media respecto al control del mismo $p$, calculada réplica a réplica; $\sigma_0\approx0{,}577$.}
+\label{tab:shift-intensidad}
+\begin{tabular}{cccccccc}
+\toprule
+$p$ & $\lambda_{\mathrm{shift}}$ & Nominal & $\Delta\bar{x}$ & $E_{+}$ (\%) & $E_{-}$ (\%) & $\sigma_X$ & $\sigma_X/\sigma_0$ \\
+\midrule
+$0{,}5$ & $0$        & ---      & ---     & 18,24 & 18,43 & 0,6040 & 1,05 \\
+$0{,}5$ & $0{,}01$   & $0{,}50$ & $0{,}560$ & 53,91 & 13,40 & 0,6312 & 1,09 \\
+$0{,}5$ & $0{,}02$   & $1{,}00$ & $0{,}786$ & 88,70 & 10,55 & 0,6104 & 1,06 \\
+$0{,}9$ & $0{,}10$   & $1{,}00$ & $0{,}737$ & 86,66 & 13,13 & 0,6710 & 1,16 \\
+$0{,}5$ & $0{,}10$   & $5{,}00$ & $0{,}985$ & 98,97 & 0,71  & 0,1725 & 0,30 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Mecanismo: de la traslación a la absorción}
+\label{sec:shift-intensidad-mecanismo}
+
+El cambio de comportamiento se explica por el umbral de confianza. Mientras la distancia entre el grupo central y el grupo de $+1$ supera el umbral, ambos grupos no interactúan por confianza y el grupo central se traslada a la velocidad nominal. Cuando el grupo central tiene una distancia al grupo de $+1$ por debajo del umbral, la regla de confianza empieza a actuar entre ambos y el grupo central es absorbido por el extremo.
+
+Según la intensidad, se distinguen tres regímenes:
+\begin{itemize}
+    \item \textbf{Traslación}: el grupo central se desplaza y los extremos permanecen en $\pm1$.
+    \item \textbf{Absorción por el extremo}: el grupo central se funde con el extremo del signo de $\lambda_{\mathrm{shift}}$. El extremo opuesto se mantiene, con minoria de los agentes, de modo que la distribución queda concentrada en los dos límites con pesos muy desiguales. Se trata de una combinación: traslación hasta la absorción y concentración en el extremo después.
+    \item \textbf{Compresión contra el límite}: el desplazamiento es suficiente para vaciar también el extremo opuesto. Prácticamente todos los agentes terminan en el extremo del signo de $\lambda_{\mathrm{shift}}$, lo que corresponde a una compresión.
+\end{itemize}
+
+La comparación entre $\Delta\bar{x}$ y el valor nominal refleja estos regímenes. Con nominal 1,0 y 5,0, la media se desplaza menos que el nominal porque el recorte impide que las opiniones superen $+1$. Con nominal 0,5, en cambio, la media se desplaza algo más que el nominal. Esto se debe a que el recorte no siempre reduce la media: cuando un agente del grupo central se acerca a $+1$, la repulsión empuja a este último más allá de $-1$ y el recorte elimina ese exceso negativo, lo que aumenta la suma total de opiniones.
+
+\subsubsection{Comparación entre pares de umbrales}
+\label{sec:shift-intensidad-pares}
+
+La Tabla~\ref{tab:shift-intensidad-pares} resume el comportamiento de los tres pares de umbrales para cada desplazamiento nominal. El umbral de confianza determina a qué distancia del extremo comienza la absorción: en $(0{,}2;0{,}7)$, el grupo central debe superar su umbral para fundirse con el extremo. Con nominal 0,5, la absorción es parcial, al final. En $(0{,}4;0{,}9)$ no hay grupos en los extremos: el consenso se traslada completo hasta alcanzar el límite y, a partir de ese momento, se acumula en él.
+
+\begin{table}[htbp]
+\centering
+\caption{Comportamiento al final de la simulación según el desplazamiento nominal.}
+\label{tab:shift-intensidad-pares}
+\small
+\begin{tabular}{llll}
+\toprule
+$(\epsilon,\theta)$ & Nominal 0,5 & Nominal 1,0 & Nominal 5,0 \\
+\midrule
+$(0{,}2;0{,}7)$ & Absorción parcial & Absorción ($E_{-}=26\,\text{\%}$) & $E_{+}=90\,\text{\%}$ \\
+$(0{,}3;0{,}8)$ & Absorción parcial & Absorción ($E_{-}\approx12\,\text{\%}$) & $E_{+}=99\,\text{\%}$ \\
+$(0{,}4;0{,}9)$ & Traslación ($\bar{x}=0{,}50$) & Acumulación ($\bar{x}\approx0{,}97$) & Todo en $+1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En resumen, el comportamiento depende del desplazamiento nominal, $(1-p)\,T\,\lambda_{\mathrm{shift}}/N$, y no de $p$ o $\lambda_{\mathrm{shift}}$ por separado. Mientras el grupo central permanece a más de $\epsilon'$ de un grupo extremo o del límite, el desplazamiento produce una traslación; cuando se acerca más, el grupo es absorbido por el extremo, y con desplazamientos muy grandes toda la distribución se comprime contra el límite.
+
+
+
+
+\subsection{Escenarios del modelo universal}
+\label{sec:shift-escenarios}
+
+En esta sección voy a encontrar las configuraciones que reproduzcan los tres escenarios del «modelo universal»: desplazamiento, compresión y expansión. Para ello se completa el análisis con los otros dos pares de umbrales, $(0{,}4;0{,}9)$ y $(0{,}2;0{,}7)$, para $p\in\{0{,}9;\,0{,}5\}$ y $\lambda_{\mathrm{shift}}\in\{0;\,0{,}01;\,0{,}02;\,0{,}10\}$. Las Figuras muestran las trayectorias de la réplica con semilla~7 y las distribuciones finales.
+
+% ---------------------------------------------------------------- Figuras (0.4, 0.9)
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p09_shift_zero.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p09_shift_001.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,10).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,50).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p09_shift_002.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 0,20).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,00).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,00).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p4_t0p9_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,00).}
+    \end{subfigure}
+    \caption{Trayectorias individuales de las opiniones para $(\epsilon,\theta)=(0{,}4;0{,}9)$ (semilla~7).}
+    \label{fig:shift-esc-04-tray}
+\end{figure}
+
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p09_shift_zero.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p09_shift_001.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,10).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,50).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p09_shift_002.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 0,20).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,00).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,00).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p4_t0p9_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,00).}
+    \end{subfigure}
+    \caption{Distribución final de las opiniones (100 réplicas) para $(\epsilon,\theta)=(0{,}4;0{,}9)$. El eje horizontal se ajusta a los datos en cada panel.}
+    \label{fig:shift-esc-04-dist}
+\end{figure}
+
+% ---------------------------------------------------------------- Figuras (0.2, 0.7)
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p09_shift_zero.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p09_shift_001.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,10).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,50).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p09_shift_002.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 0,20).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,00).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,00).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/e0p2_t0p7_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,00).}
+    \end{subfigure}
+    \caption{Trayectorias individuales de las opiniones para $(\epsilon,\theta)=(0{,}2;0{,}7)$ (semilla~7).}
+    \label{fig:shift-esc-02-tray}
+\end{figure}
+
+\begin{figure}[p]
+    \centering
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p09_shift_zero.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p05_shift_zero.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0$.}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p09_shift_001.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,10).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p05_shift_001.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}01$ (nominal 0,50).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p09_shift_002.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 0,20).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p05_shift_002.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}02$ (nominal 1,00).}
+    \end{subfigure}
+
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p09_shift_01.png}
+        \caption{$p=0{,}9$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 1,00).}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.48\textwidth}\centering
+        \includegraphics[width=\linewidth]{imagenes/experimento_7/distributions_e0p2_t0p7_p05_shift_01.png}
+        \caption{$p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,00).}
+    \end{subfigure}
+    \caption{Distribución final de las opiniones (100 réplicas) para $(\epsilon,\theta)=(0{,}2;0{,}7)$.}
+    \label{fig:shift-esc-02-dist}
+\end{figure}
+
+% ---------------------------------------------------------------- Tablas
+\begin{table}[htbp]
+\centering
+\caption{Resultados finales para $(\epsilon,\theta)=(0{,}4;0{,}9)$.}
+\label{tab:shift-esc-04}
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{ccccccccl}
+\toprule
+$p$ & $\lambda_{\mathrm{shift}}$ & Nominal & $\Delta\bar{x}$ & $E_{+}$ (\%) & $E_{-}$ (\%) & $\sigma_X$ & $\sigma_X/\sigma_0$ & Comportamiento \\
+\midrule
+0,9 & $0$        & ---        & ---        & 0,01   & 0,01 & 0,0058 & 0,01 & Consenso \\
+0,9 & $+0{,}01$  & $+0{,}10$  & $+0{,}100$ & 0,01   & 0,01 & 0,0099 & 0,02 & Traslación \\
+0,9 & $+0{,}02$  & $+0{,}20$  & $+0{,}200$ & 0,01   & 0,00 & 0,0141 & 0,02 & Traslación \\
+0,9 & $+0{,}10$  & $+1{,}00$  & $+0{,}956$ & 99,96  & 0,00 & 0,0343 & 0,06 & Acumulación en $+1$ \\
+0,5 & $0$        & ---        & ---        & 0,01   & 0,01 & 0,0068 & 0,01 & Consenso \\
+0,5 & $+0{,}01$  & $+0{,}50$  & $+0{,}499$ & 0,00   & 0,00 & 0,0209 & 0,04 & Traslación \\
+0,5 & $-0{,}01$  & $-0{,}50$  & $-0{,}499$ & 0,00   & 0,00 & 0,0244 & 0,04 & Traslación \\
+0,5 & $+0{,}02$  & $+1{,}00$  & $+0{,}982$ & 99,95  & 0,00 & 0,0280 & 0,05 & Acumulación en $+1$ \\
+0,5 & $+0{,}10$  & $+5{,}00$  & $+1{,}000$ & 100,00 & 0,00 & 0,0000 & 0,00 & Todo en $+1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados finales para $(\epsilon,\theta)=(0{,}2;0{,}7)$.}
+\label{tab:shift-esc-02}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{cccccccccl}
+\toprule
+$p$ & $\lambda_{\mathrm{shift}}$ & Nominal & $\Delta\bar{x}$ & $\Delta x_{\mathrm{c}}$ & $E_{+}$ (\%) & $E_{-}$ (\%) & $\sigma_X$ & $\sigma_X/\sigma_0$ & Comportamiento \\
+\midrule
+0,9 & $0$        & ---        & ---        & ---        & 29,55 & 29,62 & 0,7688 & 1,33 & Polarización \\
+0,9 & $+0{,}01$  & $+0{,}10$  & $+0{,}045$ & $+0{,}093$ & 29,84 & 29,33 & 0,7692 & 1,33 & Trasl. central \\
+0,9 & $+0{,}02$  & $+0{,}20$  & $+0{,}090$ & $+0{,}185$ & 30,26 & 29,04 & 0,7724 & 1,34 & Trasl. central \\
+0,9 & $+0{,}10$  & $+1{,}00$  & $+0{,}455$ & ---        & 72,24 & 27,27 & 0,8859 & 1,54 & Absorción \\
+0,5 & $0$        & ---        & ---        & ---        & 29,62 & 29,58 & 0,7690 & 1,33 & Polarización \\
+0,5 & $+0{,}01$  & $+0{,}50$  & $+0{,}337$ & $+0{,}511$ & 49,37 & 27,38 & 0,8379 & 1,45 & Absorción parcial \\
+0,5 & $-0{,}01$  & $-0{,}50$  & $-0{,}339$ & $-0{,}505$ & 27,34 & 49,62 & 0,8383 & 1,45 & Absorción parcial \\
+0,5 & $+0{,}02$  & $+1{,}00$  & $+0{,}493$ & ---        & 74,35 & 25,51 & 0,8652 & 1,50 & Absorción \\
+0,5 & $+0{,}10$  & $+5{,}00$  & $+0{,}801$ & ---        & 89,46 & 9,22  & 0,5845 & 1,01 & Casi todo en $+1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------- Desplazamiento
+\subsubsection{Desplazamiento}
+\label{sec:shift-esc-desplazamiento}
+
+El par $(0{,}4;0{,}9)$ produce un único consenso, sin grupos en los extremos. Con $\lambda_{\mathrm{shift}}=0$ el consenso se forma en torno a $0$ y permanece allí. Con $\lambda_{\mathrm{shift}}\neq0$, en cambio, el consenso se traslada completo en el sentido de $\lambda_{\mathrm{shift}}$.
+
+La configuración que mejor reproduce este escenario es $p=0{,}5$, $\lambda_{\mathrm{shift}}=\pm0{,}01$. Una vez formado el consenso, avanza en línea recta a la velocidad nominal, y termina en torno a $\pm0{,}50$ sin alcanzar el límite. El desplazamiento de la media coincide con el nominal, por lo que el grupo se traslada sin deformarse. El efecto es simétrico respecto al signo de $\lambda_{\mathrm{shift}}$. Las configuraciones con $p=0{,}9$ producen el mismo comportamiento con desplazamientos menores, de $0{,}10$ y $0{,}20$, también iguales al nominal.
+
+A diferencia de lo observado en $(0{,}3;0{,}8)$, donde solo se desplazaba el grupo central, aquí se desplaza toda la distribución. Como no hay agentes en los extremos, el recorte no actúa y el desplazamiento de la media alcanza el valor nominal. En $(0{,}2;0{,}7)$ ocurre lo contrario: con $p=0{,}9$ el grupo central se desplaza, pero la media solo se desplaza, menos de la mitad. En este par, aproximadamente el 59\,\% de los agentes está en los extremos, frente al 37\,\% de $(0{,}3;0{,}8)$, por lo que el limite anula una proporción mayor de los desplazamientos.
+
+\subsubsection{Compresión}
+\label{sec:shift-esc-compresion}
+
+Se obtienen dos tipos de compresión, producidos por mecanismos distintos.
+
+Con $\lambda_{\mathrm{shift}}=0$, el par $(0{,}4;0{,}9)$ comprime las opiniones alrededor del centro: la desviación típica pasa de $\sigma_0\approx0{,}58$ a $0{,}006$--$0{,}007$, es decir, $\sigma_X/\sigma_0\approx0{,}01$. Esta compresión la producen los umbrales del ATBCR, y no el desplazamiento, la regla de confianza reúne a todos los agentes en un único grupo, igual que en el ATBCR original.
+
+Cuando el desplazamiento nominal es suficiente para llevar el consenso hasta el límite, el consenso se traslada primero y después se acumula contra $+1$. Con nominal 1,0 la media final es de $0{,}96$--$0{,}98$ y $\sigma_X/\sigma_0\approx0{,}05$--$0{,}06$. Con $p=0{,}5$ y $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,0), todos los agentes terminan exactamente en $+1$ y $\sigma_X=0$. Esta compresión la producen el desplazamiento y el limite, y se trata de una combinación: desplazamiento hasta alcanzar el límite y compresión contra él a partir de ese momento.
+
+\subsubsection{Expansión}
+\label{sec:shift-esc-expansion}
+
+El par $(0{,}2;0{,}7)$ produce, ya con $\lambda_{\mathrm{shift}}=0$, una distribución polarizada: aproximadamente un 30\,\% de los agentes en cada extremo y un 40\,\% en un grupo central. La desviación típica aumenta de $0{,}58$ a $0{,}77$, es decir, $\sigma_X/\sigma_0=1{,}33$, lo que cumple el criterio de expansión. Esta expansión la producen los umbrales del ATBCR.
+
+El desplazamiento la refuerza. Con $p=0{,}5$, $\sigma_X/\sigma_0$ sube a $1{,}45$ con $\lambda_{\mathrm{shift}}=0{,}01$ y a $1{,}50$ con $\lambda_{\mathrm{shift}}=0{,}02$; con $p=0{,}9$ y $\lambda_{\mathrm{shift}}=0{,}10$ llega a $1{,}54$. Respecto al control del mismo $p$. La mayor parte de la expansión se debe, por tanto, a los umbrales, y el desplazamiento la amplía.
+
+Este efecto tiene un límite. Con $p=0{,}5$ y $\lambda_{\mathrm{shift}}=0{,}10$ (nominal 5,0), el desplazamiento vacía también gran parte del extremo opuesto, la distribución deja de estar polarizada y tiende a concentrarse en $+1$.
+
+\subsubsection{Resumen de los escenarios}
+\label{sec:shift-esc-resumen}
+
+La Tabla~\ref{tab:shift-esc-resumen} recoge las configuraciones que reproducen cada escenario y el mecanismo que lo produce.
+
+\begin{table}[htbp]
+\centering
+\caption{Configuraciones que reproducen los escenarios del modelo universal.}
+\label{tab:shift-esc-resumen}
+\small
+\begin{tabular}{lll}
+\toprule
+Escenario & Configuración & Mecanismo \\
+\midrule
+Desplazamiento ($\pm$) & $(0{,}4;0{,}9)$, $p=0{,}5$, $\lambda_{\mathrm{shift}}=\pm0{,}01$ & Desplazamiento \\
+Compresión hacia el consenso & $(0{,}4;0{,}9)$, $\lambda_{\mathrm{shift}}=0$ & Umbrales \\
+Compresión contra el límite & $(0{,}4;0{,}9)$, $p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$ & Desplazamiento y recorte \\
+Expansión & $(0{,}2;0{,}7)$, $\lambda_{\mathrm{shift}}=0$ & Umbrales (polarización) \\
+Expansión reforzada & $(0{,}2;0{,}7)$, $p=0{,}5$, $\lambda_{\mathrm{shift}}\in\{0{,}01;0{,}02\}$ & Umbrales y absorción \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Conclusiones}
+\label{sec:shift-conclusiones}
+
+El modelo \texttt{atbcr\_shift} mantiene el ATBCR en el dominio acotado $[-1,1]$ y añade un desplazamiento individual controlado por dos parámetros, $p$ y $\lambda_{\mathrm{shift}}$. Del análisis realizado se extraen las siguientes conclusiones.
+
+\begin{enumerate}
+    \item \textbf{La implementación es correcta.} Con $p=1$ se reproducen exactamente los resultados del ATBCR acotado.
+
+    \item \textbf{Sin desplazamiento, $p$ solo reescala el tiempo.} Con $\lambda_{\mathrm{shift}}=0$, el modelo equivale al ATBCR ejecutado durante aproximadamente $pT$ pasos. Las métricas de estructura no cambian, y las diferencias en el número de clústeres o en las frecuencias acumuladas se deben al menor número de interacciones.
+
+    \item \textbf{El desplazamiento produce traslación, y lo que la determina es el desplazamiento nominal.} Como las interacciones conservan la suma de opiniones, el desplazamiento de la media queda fijado por $(1-p)\,T\,\lambda_{\mathrm{shift}}/N$ salvo por el efecto de los limites.
+
+    \item \textbf{Lo que se traslada depende de los umbrales.} En $(0{,}4;0{,}9)$, con un único consenso, se traslada toda la distribución y la media alcanza el valor nominal. En $(0{,}3;0{,}8)$ y $(0{,}2;0{,}7)$ solo se traslada el grupo central, mientras los extremos permanecen anclados en $\pm1$.
+
+    \item \textbf{Al aumentar la fuerza, la traslación da paso a la absorción y a la compresión contra el límite.} Cuando el grupo central queda a menos de $\epsilon'$ de un grupo extremo, la regla de confianza lo une a él. Con desplazamientos nominales muy grandes, también se vacía el extremo opuesto y la distribución se concentra en el límite del signo de $\lambda_{\mathrm{shift}}$.
+
+    \item \textbf{Se han encontrado configuraciones para los tres escenarios del modelo universal} (Tabla~\ref{tab:shift-esc-resumen}):
+    \begin{itemize}
+        \item \emph{Desplazamiento positivo y negativo}: $(0{,}4;0{,}9)$, $p=0{,}5$, $\lambda_{\mathrm{shift}}=\pm0{,}01$, con una traslación completa del consenso a la velocidad nominal.
+        \item \emph{Compresión}: $(0{,}4;0{,}9)$ con $\lambda_{\mathrm{shift}}=0$, hacia el consenso, y con $p=0{,}5$, $\lambda_{\mathrm{shift}}=0{,}10$, contra el límite.
+        \item \emph{Expansión}: $(0{,}2;0{,}7)$ con $\lambda_{\mathrm{shift}}=0$, reforzada con $p=0{,}5$ y $\lambda_{\mathrm{shift}}=0{,}01$ o $0{,}02$.
+    \end{itemize}
+
+    \item \textbf{Cada escenario lo produce un mecanismo distinto.} El desplazamiento lo produce $\lambda_{\mathrm{shift}}$. La compresión hacia el consenso y la expansión por polarización las producen los umbrales del ATBCR. El desplazamiento solo comprime o expande la distribución de forma indirecta: comprime cuando las opiniones se acumulan contra el límite, y expande cuando el grupo central es absorbido por un extremo mientras el opuesto se mantiene. Reproducir los tres escenarios es necesario, elegir conjuntamente los umbrales $(\epsilon,\theta)$ y los parámetros de desplazamiento $(p,\lambda_{\mathrm{shift}})$.
+\end{enumerate}
+
+
 \end{document}

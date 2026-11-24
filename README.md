@@ -394,7 +394,7 @@ segundo. No contiene resultados hardcodeados.
 ## Plots
 
 El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
-`atbcr`. Tiene nueve subcomandos:
+`atbcr`. Los subcomandos principales son:
 
 - `metric`: lee `trajectories.csv` y dibuja una metrica temporal por serie
   `scenario/variant/normalizer/normalization_every`. Por defecto usa
@@ -432,6 +432,12 @@ El comando `atbcr-plot` genera graficos a partir de los CSV persistidos por
   replicas de `extremized_share(t)`. Acepta `--epsilon` y `--theta` para una
   curva, o varios argumentos `--pair EPSILON THETA` para comparar curvas con
   leyenda en una misma figura.
+- `xy`: dibuja la media de una columna de `trajectories.csv` frente a otra
+  (por defecto `step`), con una linea por escenario. `--run-seed` limita a una
+  o varias semillas y `--bins` agrupa un eje x continuo.
+- `signed-metrics` y `signed-metrics-summary`: metricas de opinion con signo
+  derivadas de `snapshots.csv` y su agregado entre replicas (ver
+  [Metricas con signo](#metricas-con-signo-desde-snapshots)).
 - `stability`: lee uno o varios `snapshots.csv` y calcula, para cada ejecucion e
   intervalo entre snapshots consecutivos, el maximo cambio absoluto de opinion
   entre agentes. Permite seleccionar una replica con `--run-seed`, procesa el
@@ -517,6 +523,65 @@ un estado en memoria. `snapshot-metrics` se mantiene como alias compatible.
 Para grafos no completos, `confidence_pair_exists` indica que existe una pareja
 de opiniones suficientemente proxima, pero no garantiza que esa pareja sea una
 arista del grafo.
+
+### Metricas con signo desde snapshots
+
+Las metricas de `trajectories.csv` son casi todas en valor absoluto, de modo que
+no distinguen si la distribucion se desplaza hacia +1 o hacia -1. Esto importa en
+`atbcr_shift`, cuyo desplazamiento `shift_lambda` tiene signo. Dos subcomandos
+derivan metricas con signo sin modificar la simulacion ni los CSV existentes.
+
+`signed-metrics` recorre `snapshots.csv` en streaming, un bloque contiguo
+(replica, `step`) cada vez, y escribe una fila por replica y snapshot. Si un
+bloque reaparece despues de cerrado, el fichero no esta ordenado como lo escribe
+`persistence` y se lanza un error. `--scenario` (repetible) descarta las demas
+lineas antes de parsearlas, asi que filtrar pocos escenarios es mucho mas rapido.
+
+| Columna | Definicion |
+|---|---|
+| `agent_count` | numero de agentes del snapshot |
+| `mean_opinion`, `median_opinion` | media y mediana con signo |
+| `q10_opinion`, `q25_opinion`, `q75_opinion`, `q90_opinion` | percentiles con signo (`metrics.percentile`, interpolacion lineal) |
+| `iqr_opinion`, `width_q90_q10` | `q75 - q25` y `q90 - q10` |
+| `std_opinion` | desviacion poblacional; coincide con la de `trajectories.csv` |
+| `extreme_pos_share`, `extreme_neg_share` | proporcion con `x >= cutoff` y con `x <= -cutoff`; su suma es `extremized_share` con el cutoff por defecto |
+| `at_pos_boundary_share`, `at_neg_boundary_share` | proporcion con `x >= 1 - tol` y con `x <= -1 + tol` |
+| `central_count` | agentes con `abs(x) < cutoff` |
+| `central_mean`, `central_median`, `central_std` | estadisticos del grupo central; `nan` si esta vacio |
+| `atbcr_steps`, `shift_steps` | copiados de `trajectories.csv` con `--trajectories`; vacios en otro caso |
+
+`--extreme-cutoff` vale 0.8 por defecto (el mismo corte que `extremized_share`
+en `bounded_m11`) y `--boundary-tol` vale `1e-12`.
+
+`signed-metrics-summary` agrupa por `scenario, variant, normalizer,
+normalization_every, step` y escribe `runs` y, para cada metrica,
+`<metrica>_mean`, `_median`, `_p10`, `_p90`, `_ci95_low`, `_ci95_high` y `_n`.
+El IC95 es el de `summary.csv` (`media +/- 1.96 * desviacion_muestral / sqrt(n)`).
+Los `nan` se excluyen metrica a metrica y `_n` indica cuantas replicas validas
+quedan.
+
+`--baseline CASO=CONTROL` (repetible) anade, en las filas de `CASO`, las
+diferencias emparejadas `delta_<metrica> = metrica(CASO) - metrica(CONTROL)`,
+emparejando por `run_seed`, `variant`, `normalizer`, `normalization_every` y
+`step`, con las mismas estadisticas, mas `baseline_scenario` y `delta_runs`.
+Como la misma semilla produce las mismas opiniones iniciales, el emparejamiento
+elimina la variabilidad inicial y estrecha el IC de la diferencia. Las replicas
+sin pareja se excluyen y se avisa por `stderr`. Si los `opinion_seed` de una
+pareja no coinciden, se lanza un error.
+
+```text
+atbcr-plot signed-metrics runs/experiment_0.7_shift/snapshots.csv \
+    --trajectories runs/experiment_0.7_shift/trajectories.csv \
+    --scenario e0p3_t0p8_p09_shift_zero \
+    --scenario e0p3_t0p8_p09_shift_001 \
+    --scenario e0p3_t0p8_p09_shift_minus001 \
+    --output runs/experiment_0.7_shift/signed_metrics_e0p3_t0p8_p09.csv
+
+atbcr-plot signed-metrics-summary runs/experiment_0.7_shift/signed_metrics_e0p3_t0p8_p09.csv \
+    --baseline e0p3_t0p8_p09_shift_001=e0p3_t0p8_p09_shift_zero \
+    --baseline e0p3_t0p8_p09_shift_minus001=e0p3_t0p8_p09_shift_zero \
+    --output runs/experiment_0.7_shift/signed_metrics_e0p3_t0p8_p09_summary.csv
+```
 
 ### Estabilidad entre snapshots
 

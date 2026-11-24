@@ -8,7 +8,7 @@ import math
 import re
 import statistics
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -16,6 +16,11 @@ from typing import Any, NamedTuple
 
 _GRID_SCENARIO_PATTERN = re.compile(
     r"^e(?P<epsilon>m?\d+(?:p\d+)?)_t(?P<theta>m?\d+(?:p\d+)?)$",
+)
+# Same grid prefix, optionally followed by a suffix such as "_p09_shift_minus_01".
+# Only used for scenarios the caller selected explicitly by name.
+_GRID_SCENARIO_PREFIX_PATTERN = re.compile(
+    r"^e(?P<epsilon>m?\d+(?:p\d+)?)_t(?P<theta>m?\d+(?:p\d+)?)(?:_.*)?$",
 )
 
 
@@ -153,16 +158,25 @@ def _read_extremized_share_grid(
     return ExtremizedShareGrid(epsilons, thetas, values)
 
 
-def _epsilon_theta_from_summary_row(row: dict[str, str]) -> tuple[float, float]:
+def _epsilon_theta_from_summary_row(
+    row: dict[str, str],
+    *,
+    allow_suffix: bool = False,
+) -> tuple[float, float]:
     if row.get("epsilon", "").strip() and row.get("theta", "").strip():
         return float(row["epsilon"]), float(row["theta"])
 
-    return _epsilon_theta_from_scenario(row.get("scenario", ""))
+    return _epsilon_theta_from_scenario(row.get("scenario", ""), allow_suffix=allow_suffix)
 
 
 @lru_cache(maxsize=None)
-def _epsilon_theta_from_scenario(scenario: str) -> tuple[float, float]:
-    match = _GRID_SCENARIO_PATTERN.fullmatch(scenario)
+def _epsilon_theta_from_scenario(
+    scenario: str,
+    *,
+    allow_suffix: bool = False,
+) -> tuple[float, float]:
+    pattern = _GRID_SCENARIO_PREFIX_PATTERN if allow_suffix else _GRID_SCENARIO_PATTERN
+    match = pattern.fullmatch(scenario)
     if match is None:
         raise ValueError(
             "Cannot determine epsilon and theta: add 'epsilon' and 'theta' columns "
@@ -193,9 +207,15 @@ def plot_final_opinion_histogram(
     normalizer: str | None = None,
     normalization_every: str | None = None,
     run_seed: str | None = None,
+    scenarios: Collection[str] | None = None,
     bins: int = 50,
 ) -> None:
-    """Plot final opinions for one or more epsilon/theta parameter pairs."""
+    """Plot final opinions for one or more epsilon/theta parameter pairs.
+
+    ``scenarios`` restricts the rows to those scenario names. A selected
+    scenario may carry a suffix after the grid prefix (``e0p3_t0p8_shift``);
+    its epsilon/theta are then read from that prefix.
+    """
 
     import matplotlib.pyplot as plt
 
@@ -213,6 +233,7 @@ def plot_final_opinion_histogram(
         normalizer=normalizer,
         normalization_every=normalization_every,
         run_seed=run_seed,
+        scenarios=scenarios,
     )
     all_opinions = [
         opinion for opinions in opinions_by_pair.values() for opinion in opinions
@@ -366,13 +387,14 @@ def _final_opinions_for_parameter_pairs(
     normalizer: str | None = None,
     normalization_every: str | None = None,
     run_seed: str | None = None,
+    scenarios: Collection[str] | None = None,
 ) -> dict[tuple[float, float], list[float]]:
     pairs = _resolve_parameter_pairs(parameter_pairs=parameter_pairs)
     final_by_pair_and_run: dict[
         tuple[float, float],
         dict[str, tuple[int, list[float]]],
     ] = {pair: {} for pair in pairs}
-    matched_series: dict[tuple[float, float], set[tuple[str, str, str]]] = {
+    matched_series: dict[tuple[float, float], set[tuple[str, str, str, str]]] = {
         pair: set() for pair in pairs
     }
     with snapshots_csv.open(newline="", encoding="utf-8") as handle:
@@ -386,6 +408,7 @@ def _final_opinions_for_parameter_pairs(
                 normalizer=normalizer,
                 normalization_every=normalization_every,
                 run_seed=run_seed,
+                scenarios=scenarios,
             )
             if pair is None:
                 continue
@@ -446,7 +469,7 @@ def _mean_extremized_shares_for_parameters(
     shares_by_pair_and_step: dict[tuple[float, float], dict[int, list[float]]] = {
         pair: defaultdict(list) for pair in pairs
     }
-    matched_series: dict[tuple[float, float], set[tuple[str, str, str]]] = {
+    matched_series: dict[tuple[float, float], set[tuple[str, str, str, str]]] = {
         pair: set() for pair in pairs
     }
     with trajectories_csv.open(newline="", encoding="utf-8") as handle:
@@ -510,6 +533,7 @@ def _matching_parameter_pair(
     normalizer: str | None,
     normalization_every: str | None,
     run_seed: str | None,
+    scenarios: Collection[str] | None = None,
 ) -> tuple[float, float] | None:
     filters = {
         "variant": variant,
@@ -522,8 +546,13 @@ def _matching_parameter_pair(
         for column, expected in filters.items()
     ):
         return None
+    if scenarios is not None and row.get("scenario") not in scenarios:
+        return None
     try:
-        row_epsilon, row_theta = _epsilon_theta_from_summary_row(row)
+        row_epsilon, row_theta = _epsilon_theta_from_summary_row(
+            row,
+            allow_suffix=scenarios is not None,
+        )
     except ValueError:
         return None
     for pair in parameter_pairs:
@@ -533,8 +562,9 @@ def _matching_parameter_pair(
     return None
 
 
-def _series_key(row: dict[str, str]) -> tuple[str, str, str]:
+def _series_key(row: dict[str, str]) -> tuple[str, str, str, str]:
     return (
+        row.get("scenario", ""),
         row.get("variant", ""),
         row.get("normalizer", ""),
         row.get("normalization_every", ""),
@@ -542,7 +572,7 @@ def _series_key(row: dict[str, str]) -> tuple[str, str, str]:
 
 
 def _validate_parameter_selection(
-    series: set[tuple[str, str, str]],
+    series: set[tuple[str, str, str, str]],
     *,
     epsilon: float,
     theta: float,
@@ -554,7 +584,7 @@ def _validate_parameter_selection(
     if len(series) > 1:
         raise ValueError(
             "Multiple series matched the parameter combination; use the "
-            "variant/normalizer filters to select one series",
+            "scenario/variant/normalizer filters to select one series",
         )
 
 
@@ -602,14 +632,29 @@ def plot_final_distribution(
     output_path: Path,
     *,
     bins: int = 50,
+    scenarios: Collection[str] | None = None,
 ) -> None:
-    """Plot final opinion histograms from the persisted snapshot table."""
+    """Plot final opinion histograms from the persisted snapshot table.
+
+    ``scenarios`` restricts the plot to those scenario names.
+    """
 
     import matplotlib.pyplot as plt
 
+    selected = set(scenarios) if scenarios is not None else None
     rows: list[dict[str, str]] = []
     with snapshots_csv.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
+        rows = [
+            row
+            for row in csv.DictReader(handle)
+            if selected is None or row["scenario"] in selected
+        ]
+    if selected is not None:
+        missing = selected - {row["scenario"] for row in rows}
+        if missing:
+            raise ValueError(
+                "No rows found for scenario(s): " + ", ".join(sorted(missing)),
+            )
     if not rows:
         raise ValueError("snapshots file is empty")
 

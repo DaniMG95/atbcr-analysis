@@ -36,6 +36,26 @@ from atbcr_analysis.plots.stability import (
     read_snapshot_stability_csv,
     write_snapshot_stability_csv,
 )
+from atbcr_analysis.plots.signed_metrics import (
+    SignedOpinionMetrics,
+    SignedSnapshotMetrics,
+    calculate_signed_snapshot_metrics,
+    signed_opinion_metrics,
+    write_signed_snapshot_metrics_csv,
+)
+from atbcr_analysis.plots.signed_metrics_summary import (
+    DroppedPairs,
+    SignedMetricsSummary,
+    parse_baseline,
+    summarize_signed_metrics,
+    write_signed_metrics_summary_csv,
+)
+from atbcr_analysis.plots.xy import (
+    XYPoint,
+    XYSeries,
+    plot_xy_means,
+    read_xy_means,
+)
 from atbcr_analysis.plots.snapshot_metrics import (
     SnapshotOpinionMetrics,
     calculate_snapshot_opinion_metrics,
@@ -43,6 +63,16 @@ from atbcr_analysis.plots.snapshot_metrics import (
 )
 
 __all__ = [
+    "DroppedPairs",
+    "SignedMetricsSummary",
+    "SignedOpinionMetrics",
+    "SignedSnapshotMetrics",
+    "calculate_signed_snapshot_metrics",
+    "parse_baseline",
+    "signed_opinion_metrics",
+    "summarize_signed_metrics",
+    "write_signed_metrics_summary_csv",
+    "write_signed_snapshot_metrics_csv",
     "AggregatePoint",
     "ComparativeSeries",
     "ExtremizedShareGrid",
@@ -52,6 +82,8 @@ __all__ = [
     "SnapshotOpinionMetrics",
     "StabilityPoint",
     "StabilitySeries",
+    "XYPoint",
+    "XYSeries",
     "aggregate_trajectories",
     "aggregate_snapshot_stability",
     "calculate_snapshot_opinion_metrics",
@@ -64,9 +96,11 @@ __all__ = [
     "plot_metric_trajectories",
     "plot_opinion_trajectories",
     "plot_snapshot_stability",
+    "plot_xy_means",
     "read_comparative_trajectories",
     "read_snapshot_stability",
     "read_snapshot_stability_csv",
+    "read_xy_means",
     "write_linear_fits_csv",
     "write_snapshot_opinion_metrics_csv",
     "write_snapshot_stability_csv",

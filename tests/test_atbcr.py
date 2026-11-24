@@ -1022,6 +1022,82 @@ class PlotCliTests(unittest.TestCase):
 
         self.assertEqual(opinions[(0.2, 0.7)], [-0.6])
 
+    def _write_shifted_snapshots(self, directory: str, *, with_parameters: bool) -> Path:
+        snapshots_path = Path(directory) / "snapshots.csv"
+        header = "scenario,variant,normalizer,normalization_every,run_seed,step,agent,opinion"
+        parameters = ",0.3,0.8" if with_parameters else ""
+        if with_parameters:
+            header += ",epsilon,theta"
+        lines = [header]
+        for scenario, final_opinion in (
+            ("e0p3_t0p8", "0.5"),
+            ("e0p3_t0p8_p09_shift_minus_01", "-0.4"),
+        ):
+            lines.append(f"{scenario},unbounded,none,,1,0,0,0.0{parameters}")
+            lines.append(f"{scenario},unbounded,none,,1,10,0,{final_opinion}{parameters}")
+        snapshots_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return snapshots_path
+
+    def test_final_opinions_select_suffixed_scenario_by_name(self) -> None:
+        for with_parameters in (False, True):
+            with self.subTest(with_parameters=with_parameters):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    snapshots_path = self._write_shifted_snapshots(
+                        temporary_directory,
+                        with_parameters=with_parameters,
+                    )
+                    opinions = plots._final_opinions_for_parameter_pairs(
+                        snapshots_path,
+                        parameter_pairs=[(0.3, 0.8)],
+                        scenarios=["e0p3_t0p8_p09_shift_minus_01"],
+                    )
+
+                self.assertEqual(opinions[(0.3, 0.8)], [-0.4])
+
+    def test_final_opinions_reject_scenarios_sharing_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshots_path = self._write_shifted_snapshots(
+                temporary_directory,
+                with_parameters=True,
+            )
+            with self.assertRaisesRegex(ValueError, "Multiple series"):
+                plots._final_opinions_for_parameter_pairs(
+                    snapshots_path,
+                    parameter_pairs=[(0.3, 0.8)],
+                )
+
+    def test_final_distribution_filters_scenarios(self) -> None:
+        import matplotlib.pyplot as plt
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshots_path = self._write_shifted_snapshots(
+                temporary_directory,
+                with_parameters=False,
+            )
+            with patch("matplotlib.pyplot.close") as close_plot:
+                plots.plot_final_distribution(
+                    snapshots_path,
+                    Path(temporary_directory) / "distribution.png",
+                    bins=5,
+                    scenarios=["e0p3_t0p8_p09_shift_minus_01"],
+                )
+            figure = close_plot.call_args.args[0]
+            try:
+                labels = [
+                    text.get_text() for text in figure.axes[0].get_legend().get_texts()
+                ]
+            finally:
+                plt.close(figure)
+
+            self.assertEqual(labels, ["e0p3_t0p8_p09_shift_minus_01/unbounded/none/"])
+
+            with self.assertRaisesRegex(ValueError, "No rows found for scenario"):
+                plots.plot_final_distribution(
+                    snapshots_path,
+                    Path(temporary_directory) / "missing.png",
+                    scenarios=["does_not_exist"],
+                )
+
     def test_parameter_distribution_range_follows_variant_domain(self) -> None:
         from atbcr_analysis.plots import plots as plots_module
 
@@ -1400,6 +1476,7 @@ class PlotCliTests(unittest.TestCase):
             Path("runs/reference/snapshots.csv"),
             Path("runs/reference/final_distribution.svg"),
             bins=20,
+            scenarios=None,
         )
 
     def test_distribution_command_uses_default_bins(self) -> None:
@@ -1420,6 +1497,7 @@ class PlotCliTests(unittest.TestCase):
             Path("runs/reference/snapshots.csv"),
             Path("runs/reference/final_distribution.png"),
             bins=50,
+            scenarios=None,
         )
 
     def test_final_opinions_command_uses_default_output(self) -> None:
@@ -1515,7 +1593,56 @@ class PlotCliTests(unittest.TestCase):
             normalizer="none",
             normalization_every=None,
             run_seed="7",
+            scenarios=None,
             bins=25,
+        )
+
+    def test_distribution_commands_accept_scenario_filter(self) -> None:
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_final_distribution",
+        ) as plot_distribution:
+            exit_code = plot_cli.main(
+                [
+                    "distribution",
+                    "runs/reference/snapshots.csv",
+                    "--scenario",
+                    "e0p3_t0p8_p09_shift_minus_01",
+                    "--scenario",
+                    "e0p3_t0p8",
+                    "--output",
+                    "runs/reference/shift.png",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        plot_distribution.assert_called_once_with(
+            Path("runs/reference/snapshots.csv"),
+            Path("runs/reference/shift.png"),
+            bins=50,
+            scenarios=["e0p3_t0p8_p09_shift_minus_01", "e0p3_t0p8"],
+        )
+
+        with patch(
+            "atbcr_analysis.plots.plot_cli.plot_final_opinion_histogram",
+        ) as plot_histogram:
+            exit_code = plot_cli.main(
+                [
+                    "parameter-distribution",
+                    "runs/reference/snapshots.csv",
+                    "--pair",
+                    "0.3",
+                    "0.8",
+                    "--scenarios",
+                    "e0p3_t0p8_p09_shift_minus_01",
+                    "--output",
+                    "runs/reference/shift_pair.png",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            plot_histogram.call_args.kwargs["scenarios"],
+            ["e0p3_t0p8_p09_shift_minus_01"],
         )
 
 

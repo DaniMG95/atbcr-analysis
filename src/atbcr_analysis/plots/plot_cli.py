@@ -19,6 +19,18 @@ from atbcr_analysis.plots import (
     plot_snapshot_stability,
     write_snapshot_opinion_metrics_csv,
 )
+from atbcr_analysis.plots.signed_metrics import (
+    DEFAULT_BOUNDARY_TOL,
+    DEFAULT_EXTREME_CUTOFF,
+    calculate_signed_snapshot_metrics,
+    write_signed_snapshot_metrics_csv,
+)
+from atbcr_analysis.plots.signed_metrics_summary import (
+    parse_baseline,
+    summarize_signed_metrics,
+    write_signed_metrics_summary_csv,
+)
+from atbcr_analysis.plots.xy import plot_xy_means
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,8 +68,35 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("--fit-output", type=Path)
     compare.add_argument("--output", type=Path, required=True)
 
+    xy = subparsers.add_parser(
+        "xy",
+        help="plot the mean of one trajectories column against another, per scenario",
+    )
+    xy.add_argument("--input", type=Path, nargs="+", required=True)
+    xy.add_argument("--x", default="step", help="column for the x axis (default: step)")
+    xy.add_argument("--y", required=True, help="column whose mean is plotted")
+    xy.add_argument(
+        "--run-seed",
+        nargs="+",
+        help="restrict to these run seeds; omit to average over every seed",
+    )
+    xy.add_argument("--scenarios", nargs="+")
+    xy.add_argument("--variants", nargs="+")
+    xy.add_argument("--normalizers", nargs="+")
+    xy.add_argument("--normalization-every", nargs="+")
+    xy.add_argument(
+        "--bins",
+        type=int,
+        help="group x into this many equal-width bins instead of exact values",
+    )
+    xy.add_argument("--xscale", choices=("linear", "log", "symlog"), default="linear")
+    xy.add_argument("--yscale", choices=("linear", "log", "symlog"), default="linear")
+    xy.add_argument("--markers", action="store_true")
+    xy.add_argument("--output", type=Path, required=True)
+
     distribution = subparsers.add_parser("distribution")
     distribution.add_argument("snapshots_csv", type=Path)
+    _add_scenarios_filter(distribution)
     distribution.add_argument("--bins", type=int, default=50)
     distribution.add_argument("--output", type=Path, required=True)
 
@@ -87,6 +126,40 @@ def main(argv: list[str] | None = None) -> int:
     opinion_metrics.add_argument("--run-seed")
     opinion_metrics.add_argument("--output", type=Path, required=True)
 
+    signed = subparsers.add_parser(
+        "signed-metrics",
+        help="derive signed opinion metrics per run and snapshot from snapshots.csv",
+    )
+    signed.add_argument("snapshots_csv", type=Path)
+    signed.add_argument("--output", type=Path, required=True)
+    signed.add_argument(
+        "--trajectories",
+        type=Path,
+        help="trajectories.csv used to copy atbcr_steps and shift_steps",
+    )
+    signed.add_argument("--extreme-cutoff", type=float, default=DEFAULT_EXTREME_CUTOFF)
+    signed.add_argument("--boundary-tol", type=float, default=DEFAULT_BOUNDARY_TOL)
+    signed.add_argument(
+        "--scenario",
+        action="extend",
+        nargs="+",
+        help="only process these scenarios; the option can be repeated",
+    )
+
+    signed_summary = subparsers.add_parser(
+        "signed-metrics-summary",
+        help="aggregate signed metrics across replicas, optionally paired with a control",
+    )
+    signed_summary.add_argument("signed_metrics_csv", type=Path)
+    signed_summary.add_argument("--output", type=Path, required=True)
+    signed_summary.add_argument(
+        "--baseline",
+        action="append",
+        default=[],
+        metavar="CASE=CONTROL",
+        help="add paired deltas CASE - CONTROL by run_seed; repeat for several cases",
+    )
+
     heatmap = subparsers.add_parser("extremized-heatmap")
     heatmap.add_argument("summary_csv", type=Path)
     heatmap.add_argument("--variant")
@@ -102,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         "--run-seed",
         help="restrict final opinions to one Monte Carlo run seed",
     )
+    _add_scenarios_filter(parameter_distribution)
     parameter_distribution.add_argument("--bins", type=int, default=50)
     parameter_distribution.add_argument("--output", type=Path, required=True)
 
@@ -159,8 +233,29 @@ def main(argv: list[str] | None = None) -> int:
             fit_end=args.fit_end,
             fit_output=args.fit_output,
         )
+    elif args.command == "xy":
+        plot_xy_means(
+            args.input,
+            args.output,
+            x=args.x,
+            y=args.y,
+            run_seeds=args.run_seed,
+            scenarios=args.scenarios,
+            variants=args.variants,
+            normalizers=args.normalizers,
+            normalization_every=args.normalization_every,
+            bins=args.bins,
+            xscale=args.xscale,
+            yscale=args.yscale,
+            markers=args.markers,
+        )
     elif args.command == "distribution":
-        plot_final_distribution(args.snapshots_csv, args.output, bins=args.bins)
+        plot_final_distribution(
+            args.snapshots_csv,
+            args.output,
+            bins=args.bins,
+            scenarios=args.scenarios,
+        )
     elif args.command == "final-opinions":
         output_path = args.output or args.snapshots_csv.with_name("final_opinions.csv")
         reduce_snapshots_csv(args.snapshots_csv, output_path)
@@ -188,6 +283,28 @@ def main(argv: list[str] | None = None) -> int:
             run_seed=args.run_seed,
         )
         write_snapshot_opinion_metrics_csv(args.output, metrics)
+    elif args.command == "signed-metrics":
+        records = calculate_signed_snapshot_metrics(
+            args.snapshots_csv,
+            trajectories_csv=args.trajectories,
+            extreme_cutoff=args.extreme_cutoff,
+            boundary_tol=args.boundary_tol,
+            scenarios=args.scenario,
+        )
+        write_signed_snapshot_metrics_csv(args.output, records)
+    elif args.command == "signed-metrics-summary":
+        try:
+            baselines = [parse_baseline(value) for value in args.baseline]
+        except ValueError as error:
+            parser.error(str(error))
+        summary = summarize_signed_metrics(args.signed_metrics_csv, baselines=baselines)
+        for dropped in summary.dropped_pairs:
+            print(
+                f"warning: {dropped.case} vs {dropped.control}: {dropped.runs} replica(s) "
+                f"without a paired control ({dropped.snapshots} snapshot(s)) were excluded",
+                file=sys.stderr,
+            )
+        write_signed_metrics_summary_csv(args.output, summary)
     elif args.command == "extremized-heatmap":
         plot_extremized_share_heatmap(
             args.summary_csv,
@@ -206,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
             normalizer=args.normalizer,
             normalization_every=args.normalization_every,
             run_seed=args.run_seed,
+            scenarios=args.scenarios,
             bins=args.bins,
         )
     elif args.command == "extremized-trajectory":
@@ -249,6 +367,18 @@ def _add_parameter_arguments(
     parser.add_argument("--variant")
     parser.add_argument("--normalizer")
     parser.add_argument("--normalization-every")
+
+
+def _add_scenarios_filter(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--scenarios",
+        "--scenario",
+        dest="scenarios",
+        action="extend",
+        nargs="+",
+        metavar="SCENARIO",
+        help="only use these scenario names (repeatable)",
+    )
 
 
 def _add_pair_argument(parser: argparse.ArgumentParser) -> None:

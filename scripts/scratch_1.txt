@@ -1,4 +1,16 @@
-atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k1 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_1.png
-atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k10 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_10.png
-atbcr-plot parameter-distribution runs/experiment_0.6/snapshots.csv --pair 0.2 0.7 --variant dynamic_thresholds_k1000 --bins 50 --run-seed 7 --output runs/experiment_0.6/final_distribution_every_1000.png
-
+atbcr-plot opinions runs/experiment_0.7_shift/snapshots.csv --scenario e0p4_t0p9_p09_shift_zero --run-seed 7 --output runs/experiment_0.7_shift/e0p4_t0p9_p09_shift_zero.png
+atbcr-plot opinions runs/experiment_0.7_shift/snapshots.csv --scenario e0p4_t0p9_p09_shift_001 --run-seed 7 --output runs/experiment_0.7_shift/e0p4_t0p9_p09_shift_001.png
+atbcr-plot opinions runs/experiment_0.8_shift/snapshots.csv --scenario e0p4_t0p9_p09_shift_002 --run-seed 7 --output runs/experiment_0.7_shift/e0p4_t0p9_p09_shift_002.png
+atbcr-plot opinions runs/experiment_0.9_shift/snapshots.csv --scenario e0p4_t0p9_p09_shift_01 --run-seed 7 --output runs/experiment_0.7_shift/e0p4_t0p9_p09_shift_01.png
+atbcr-plot opinions runs/experiment_0.7_shift/snapshots.csv --scenario e0p2_t0p7_p09_shift_zero --run-seed 7 --output runs/experiment_0.7_shift/e0p2_t0p7_p09_shift_zero.png
+atbcr-plot opinions runs/experiment_0.7_shift/snapshots.csv --scenario e0p2_t0p7_p09_shift_001 --run-seed 7 --output runs/experiment_0.7_shift/e0p2_t0p7_p09_shift_001.png
+atbcr-plot opinions runs/experiment_0.8_shift/snapshots.csv --scenario e0p2_t0p7_p09_shift_002 --run-seed 7 --output runs/experiment_0.7_shift/e0p2_t0p7_p09_shift_002.png
+atbcr-plot opinions runs/experiment_0.9_shift/snapshots.csv --scenario e0p2_t0p7_p09_shift_01 --run-seed 7 --output runs/experiment_0.7_shift/e0p2_t0p7_p09_shift_01.png
+atbcr-plot distribution runs/experiment_0.7_shift/final_opinions.csv --scenario e0p4_t0p9_p09_shift_zero --bins 50 --output runs//experiment_0.7_shift/distributions_e0p4_t0p9_p09_shift_zero.png
+atbcr-plot distribution runs/experiment_0.7_shift/final_opinions.csv --scenario e0p4_t0p9_p09_shift_001 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p4_t0p9_p09_shift_001.png
+atbcr-plot distribution runs/experiment_0.8_shift/final_opinions.csv --scenario e0p4_t0p9_p09_shift_002 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p4_t0p9_p09_shift_002.png
+atbcr-plot distribution runs/experiment_0.9_shift/final_opinions.csv --scenario e0p4_t0p9_p09_shift_01 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p4_t0p9_p09_shift_01.png
+atbcr-plot distribution runs/experiment_0.7_shift/final_opinions.csv --scenario e0p2_t0p7_p09_shift_zero --bins 50 --output runs//experiment_0.7_shift/distributions_e0p2_t0p7_p09_shift_zero.png
+atbcr-plot distribution runs/experiment_0.7_shift/final_opinions.csv --scenario e0p2_t0p7_p09_shift_001 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p2_t0p7_p09_shift_001.png
+atbcr-plot distribution runs/experiment_0.8_shift/final_opinions.csv --scenario e0p2_t0p7_p09_shift_002 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p2_t0p7_p09_shift_002.png
+atbcr-plot distribution runs/experiment_0.9_shift/final_opinions.csv --scenario e0p2_t0p7_p09_shift_01 --bins 50 --output runs//experiment_0.7_shift/distributions_e0p2_t0p7_p09_shift_01.png
